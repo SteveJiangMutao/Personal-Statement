@@ -23,13 +23,11 @@ st.markdown("---")
 # ==========================================
 with st.sidebar:
     st.header("⚙️ 系统设置")
-    if "GOOGLE_API_KEY" in st.secrets:
-        api_key = st.secrets["GOOGLE_API_KEY"]
-        st.success("✅ Key 已加载")
-    else:
-        api_key = st.text_input("Gemini API Key", type="password")
+    # 直接将 Key 赋值给变量
+    api_key = "AIzaSyDQ51jjPXsbeboTG-qrpgvy-HAtM-NYHpU"
+    st.success("✅ Key 已内置")
     
-    # 推荐使用 1.5 Pro 或 3.0 Pro，因为需要处理长文档和图片
+    # 依然保留模型选择
     model_name = st.selectbox("选择模型", ["gemini-1.5-pro", "gemini-3-pro-preview"], index=0)
 
 # ==========================================
@@ -294,4 +292,5 @@ if st.session_state.get('generated_sections'):
         file_name=f"Personal_Statement_{target_school_name}.txt",
         mime="text/plain",
         type="primary"
+
     )
