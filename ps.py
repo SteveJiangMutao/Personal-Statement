@@ -5,37 +5,32 @@ import docx
 import io
 
 # ==========================================
-# 1. 页面基础配置与 Session State 初始化
+# 1. 页面基础配置
 # ==========================================
 st.set_page_config(page_title="AI 留学文书深度生成器 (Pro)", page_icon="✍️", layout="wide")
 
-# 初始化 Session State
 if 'generated_sections' not in st.session_state:
     st.session_state['generated_sections'] = {}
 if 'step' not in st.session_state:
     st.session_state['step'] = 1
 
-st.title("✍️ AI 留学文书深度生成器 (Pro)")
+st.title("✍️ AI 留学文书深度生成器 (纯净输出版)")
 st.markdown("---")
 
 # ==========================================
-# 2. 侧边栏：API 设置 (已内置 Key)
+# 2. 系统设置 (内置 Key)
 # ==========================================
 with st.sidebar:
     st.header("⚙️ 系统设置")
-    
-    # --- 🔑 核心修改：直接内置 API Key ---
     api_key = "AIzaSyDQ51jjPXsbeboTG-qrpgvy-HAtM-NYHpU"
     st.success("✅ Key 已内置")
-    
-    # 模型选择 (保留 gemini-3-pro 以处理长文本和图片)
+    # 必须使用 Pro 模型以处理多图和长文本
     model_name = st.selectbox("选择模型", ["gemini-1.5-pro", "gemini-3-pro-preview"], index=0)
 
 # ==========================================
-# 3. 辅助函数
+# 3. 核心函数
 # ==========================================
 def read_word_file(file):
-    """读取 Word 文档内容"""
     try:
         doc = docx.Document(file)
         full_text = []
@@ -45,8 +40,10 @@ def read_word_file(file):
     except Exception as e:
         return f"Error reading Word file: {e}"
 
-def get_gemini_response(prompt, image_parts=None, text_context=None):
-    """调用 Gemini API"""
+def get_gemini_response(prompt, images=None, text_context=None):
+    """
+    images: 可以是单个 PIL Image，也可以是 PIL Image 的列表
+    """
     genai.configure(api_key=api_key)
     model = genai.GenerativeModel(model_name)
     
@@ -56,8 +53,12 @@ def get_gemini_response(prompt, image_parts=None, text_context=None):
     if text_context:
         content.append(f"\n【参考文档/背景信息】:\n{text_context}")
     
-    if image_parts:
-        content.append(image_parts)
+    # 处理图片输入 (支持单图或多图列表)
+    if images:
+        if isinstance(images, list):
+            content.extend(images)
+        else:
+            content.append(images)
         
     try:
         response = model.generate_content(content)
@@ -66,7 +67,7 @@ def get_gemini_response(prompt, image_parts=None, text_context=None):
         return f"Error: {str(e)}"
 
 # ==========================================
-# 4. 界面：第一步 - 信息采集
+# 4. 界面：信息采集
 # ==========================================
 st.header("1️⃣ 信息采集与素材上传")
 
@@ -75,138 +76,143 @@ col1, col2 = st.columns(2)
 with col1:
     st.subheader("📂 学生素材")
     uploaded_word = st.file_uploader("上传文书信息收集表 (.docx)", type=['docx'])
-    uploaded_transcript = st.file_uploader("上传成绩单截图 (Image)", type=['png', 'jpg', 'jpeg'])
+    uploaded_transcript = st.file_uploader("上传成绩单截图 (单张)", type=['png', 'jpg', 'jpeg'])
 
 with col2:
     st.subheader("🧠 顾问指导 & 目标")
-    counselor_strategy = st.text_area("顾问指导思路 (你的Direction)", height=150, 
-                                      placeholder="例如：强调该生在量化分析方面的潜力，弱化GPA劣势，重点突出某段互联网大厂的实习...")
+    counselor_strategy = st.text_area("顾问指导思路 (Direction)", height=100, 
+                                      placeholder="例如：强调量化分析潜力，弱化GPA...")
     target_school_name = st.text_input("目标学校 & 专业名称", placeholder="例如：UCL - MSc Business Analytics")
-    target_curriculum = st.text_area("目标专业课程设置 (复制粘贴官网课程列表)", height=150, 
-                                     placeholder="例如：Core modules: Data Mining, Econometrics... Electives: ...")
+    
+    # --- 修改点：改为上传多张截图 ---
+    st.markdown("**目标专业课程设置 (上传官网截图/多张):**")
+    uploaded_curriculum_images = st.file_uploader("上传课程列表截图", type=['png', 'jpg', 'jpeg'], accept_multiple_files=True)
 
-# 提取 Word 内容
+# 读取 Word
 word_content = ""
 if uploaded_word:
     word_content = read_word_file(uploaded_word)
-    with st.expander("查看已读取的文书素材"):
-        st.text(word_content[:500] + "...")
 
 # ==========================================
-# 5. 界面：第二步 - 模块选择
+# 5. 界面：模块选择
 # ==========================================
 st.markdown("---")
 st.header("2️⃣ 写作模块选择")
 
 modules = {
-    "Motivation": "申请动机 (结合行业热点)",
-    "Academic": "本科学习经历 (基于成绩单)",
-    "Internship": "实习/工作经历 (基于素材表)",
-    "Why_School": "Why School (基于课程匹配)",
-    "Career_Goal": "职业规划 (具体职位与路径)"
+    "Motivation": "申请动机",
+    "Academic": "本科学习经历",
+    "Internship": "实习/工作经历",
+    "Why_School": "Why School (基于课程截图)",
+    "Career_Goal": "职业规划"
 }
 
-selected_modules = st.multiselect("请勾选本篇文书需要包含的模块：", list(modules.keys()), format_func=lambda x: modules[x], default=list(modules.keys()))
+selected_modules = st.multiselect("选择模块：", list(modules.keys()), format_func=lambda x: modules[x], default=list(modules.keys()))
 
 # ==========================================
-# 6. 核心逻辑：生成 Prompt 并写作
+# 6. 核心逻辑：生成 Prompt
 # ==========================================
 st.markdown("---")
 st.header("3️⃣ AI 深度写作")
 
+# 定义一个通用的“纯净输出”指令，复用到所有 Prompt 中
+CLEAN_OUTPUT_RULES = """
+【🚨 绝对输出规则 (违反将导致任务失败) 🚨】
+1. **只输出正文内容本身**。
+2. **严禁**包含任何开场白（如 "Here is the draft", "这是一段..."）。
+3. **严禁**包含任何结尾语或 "设计思路"、"逻辑结构" 说明。
+4. **严禁**使用 Markdown 加粗符号（即不要出现 **text**）。
+5. **严禁**使用 Markdown 列表符号（如 - 或 1.）。
+6. **严禁**使用 Markdown 标题符号（如 ###）。
+7. 输出必须是**纯文本**，仅包含必要的标点符号。
+8. 必须写成**一个完整的、连贯的中文自然段**。
+"""
+
 if st.button("🚀 开始生成初稿", type="primary"):
-    if not uploaded_word or not uploaded_transcript or not target_curriculum:
-        st.error("❌ 请确保文书素材表、成绩单截图、目标课程设置均已填写/上传。")
+    # 检查必要输入
+    if not uploaded_word or not uploaded_transcript or not uploaded_curriculum_images:
+        st.error("❌ 请确保：文书素材表、成绩单截图、目标课程截图 均已上传。")
         st.stop()
     
-    image_obj = Image.open(uploaded_transcript)
+    # 准备图片对象
+    transcript_img = Image.open(uploaded_transcript)
+    curriculum_imgs = [Image.open(img) for img in uploaded_curriculum_images]
     
     progress_bar = st.progress(0)
     total_steps = len(selected_modules)
     current_step = 0
 
-    # --- 定义各个模块的 Prompt (强制自然段版) ---
+    # --- 定义 Prompt ---
     
     # 1. 动机
     prompt_motivation = f"""
     【任务】撰写 Personal Statement 的 "申请动机" 部分。
     【输入背景】
-    - 顾问指导思路: {counselor_strategy}
+    - 顾问思路: {counselor_strategy}
     - 目标专业: {target_school_name}
     - 学生素材: 见附带文本
-    【格式要求】
-    - **必须写成一个完整的、连贯的中文自然段**。
-    - **严禁**使用列表、要点（1. 2. 3.）或分段。
     【内容要求】
-    1. 从素材中提取触发兴趣的经历。
-    2. 结合 {target_school_name} 所在领域的行业热点或热门话题。
-    3. 逻辑连接：学生兴趣 -> 行业热点 -> 申请该细分领域的必要性。
-    4. 语气简洁凝练，开门见山，体现深度思考。
+    1. 提取素材中触发兴趣的经历。
+    2. 结合 {target_school_name} 所在领域的行业热点。
+    3. 逻辑连接：兴趣 -> 热点 -> 申请必要性。
+    4. 语气简洁凝练，开门见山。
+    {CLEAN_OUTPUT_RULES}
     """
 
     # 2. 职业规划
     prompt_career = f"""
-    【任务】撰写 Personal Statement 的 "职业规划" (Career Goals) 部分。
+    【任务】撰写 "职业规划" (Career Goals) 部分。
     【输入背景】
     - 目标专业: {target_school_name}
     - 顾问思路: {counselor_strategy}
-    【格式要求】
-    - **必须写成一个完整的、连贯的中文自然段**。
-    - **严禁**使用列表、要点或分段。
     【内容要求】
-    1. 基于申请动机，规划一条切实可行的路径（应届生视角）。
+    1. 规划硕士毕业后的路径（应届生视角）。
     2. **必须包含**：具体的公司名字、具体的职位名称。
-    3. 将工作内容描述和在岗位上的学习方向融合在这一段话中，不要罗列。
+    3. 将工作内容和学习方向融合在一段话中。
+    {CLEAN_OUTPUT_RULES}
     """
 
-    # 3. 本科学习 (视觉)
+    # 3. 本科学习 (视觉 - 成绩单)
     prompt_academic = f"""
-    【任务】撰写 Personal Statement 的 "本科学习经历" (Academic Background) 部分。
+    【任务】撰写 "本科学习经历" (Academic Background) 部分。
     【输入背景】
     - 目标专业: {target_school_name}
     - 成绩单: 见附带图片
-    【格式要求】
-    - **必须写成一个完整的、连贯的中文自然段**。
-    - **严禁**简单的罗列课程名称。
-    - **严禁**使用列表或分点。
     【内容要求】
-    1. 仔细阅读成绩单，筛选出与 {target_school_name} 高度相关的课程模块。
-    2. 将这些课程的关键概念、方法学融合成一段有逻辑的叙述。
-    3. 强调课程之间的联系（如基础与进阶、理论与实践的交集），体现学术深度。
+    1. 仔细阅读成绩单图片，筛选出与 {target_school_name} **高度相关**的课程。
+    2. 将课程的关键概念、方法学融合成一段有逻辑的叙述。
+    3. 强调课程间的联系（基础/进阶/交叉），体现学术深度。
+    {CLEAN_OUTPUT_RULES}
     """
 
-    # 4. Why School
+    # 4. Why School (视觉 - 课程截图)
     prompt_whyschool = f"""
-    【任务】撰写 Personal Statement 的 "Why School" 部分。
+    【任务】撰写 "Why School" 部分。
     【输入背景】
     - 目标学校: {target_school_name}
-    - 目标课程设置: {target_curriculum}
+    - 课程列表: 见附带的多张图片
     - 顾问思路: {counselor_strategy}
-    【格式要求】
-    - **必须写成一个完整的、连贯的中文自然段**。
-    - **严禁**使用列表或分点。
     【内容要求】
-    1. 根据目标课程设置，阐述对特定课程（提及关键概念/方法学）的兴趣。
-    2. 说明这些课程对学生的具体帮助。
-    3. 将上述内容与申请动机自然融合，语气朴素专业，以议论和分析为主，不要夸张。
+    1. **视觉分析**：仔细阅读所有附带的课程列表截图。
+    2. **筛选**：从中挑选出 3-4 门与学生背景或未来规划最相关的特定课程。
+    3. **阐述**：说明这些课程（提及具体课名或核心概念）为何吸引学生，以及能提供什么帮助。
+    4. 语气朴素专业，议论为主，不要夸张。
+    {CLEAN_OUTPUT_RULES}
     """
 
     # 5. 实习/工作
     prompt_internship = f"""
-    【任务】撰写 Personal Statement 的 "实习/工作经历" (Professional Experience) 部分。
+    【任务】撰写 "实习/工作经历" (Professional Experience) 部分。
     【输入背景】
     - 学生素材: 见附带文本
     - 目标专业: {target_school_name}
-    【格式要求】
-    - **必须写成一个完整的、连贯的中文自然段**。
-    - **严禁**流水账，**严禁**使用列表。
     【内容要求】
-    1. 筛选最相关的经历，按时间顺序逻辑串联。
-    2. 结构融合：背景 -> 职责 -> 技能 -> 攻读硕士的动机。
-    3. 保留少量执行细节以保真，但重点在于逻辑梳理和反思。
+    1. 筛选最相关经历，按时间顺序逻辑串联。
+    2. 结构：背景 -> 职责 -> 技能 -> 动机。
+    3. 拒绝流水账，要有逻辑梳理和反思。
+    {CLEAN_OUTPUT_RULES}
     """
 
-    # --- 循环生成 ---
     prompts_map = {
         "Motivation": prompt_motivation,
         "Career_Goal": prompt_career,
@@ -219,22 +225,27 @@ if st.button("🚀 开始生成初稿", type="primary"):
         current_step += 1
         st.toast(f"正在撰写: {modules[module]} ...")
         
-        img_input = image_obj if module == "Academic" else None
+        # 决定传入哪组图片
+        current_images = None
+        if module == "Academic":
+            current_images = transcript_img # 传成绩单
+        elif module == "Why_School":
+            current_images = curriculum_imgs # 传课程截图列表
         
-        res = get_gemini_response(prompts_map[module], image_parts=img_input, text_context=word_content)
+        res = get_gemini_response(prompts_map[module], images=current_images, text_context=word_content)
         
-        st.session_state['generated_sections'][module] = res
+        st.session_state['generated_sections'][module] = res.strip() # 去除首尾空格
         progress_bar.progress(current_step / total_steps)
 
-    st.success("✅ 初稿生成完毕！请在下方查看并修改。")
+    st.success("✅ 初稿生成完毕！")
 
 # ==========================================
-# 7. 界面：第四步 - 反馈与修改
+# 7. 界面：反馈与修改
 # ==========================================
 if st.session_state.get('generated_sections'):
     st.markdown("---")
-    st.header("4️⃣ 审阅与精修 (Feedback Loop)")
-    st.info("👇 AI 已将每个部分写成一个完整的自然段。如需调整，请在下方输入建议。")
+    st.header("4️⃣ 审阅与精修")
+    st.info("👇 AI 已按纯净模式输出。如需修改，请在下方输入建议。")
 
     display_order = ["Motivation", "Academic", "Internship", "Why_School", "Career_Goal"]
     
@@ -244,32 +255,29 @@ if st.session_state.get('generated_sections'):
                 st.subheader(f"📄 {modules[module]}")
                 
                 current_content = st.session_state['generated_sections'][module]
-                st.text_area(f"当前内容 ({module})", value=current_content, height=250, key=f"text_{module}")
+                st.text_area(f"内容 ({module})", value=current_content, height=200, key=f"text_{module}")
                 
                 col_f1, col_f2 = st.columns([3, 1])
                 with col_f1:
-                    feedback = st.text_input(f"针对 {modules[module]} 的修改建议:", key=f"fb_{module}", placeholder="例如：增加一点关于xx项目的细节；语气再学术一点...")
+                    feedback = st.text_input(f"修改建议 ({modules[module]}):", key=f"fb_{module}")
                 with col_f2:
                     if st.button(f"🔄 修改 {module}", key=f"btn_{module}"):
                         if not feedback:
-                            st.warning("请先输入修改建议")
+                            st.warning("请输入建议")
                         else:
-                            with st.spinner(f"正在重写 {modules[module]}..."):
+                            with st.spinner("正在重写..."):
                                 revise_prompt = f"""
-                                【任务】根据反馈修改文书段落。
+                                【任务】根据反馈修改段落。
                                 【原段落】{current_content}
                                 【用户反馈】{feedback}
-                                【严格约束】
-                                1. **必须输出为一个完整的、连贯的中文自然段**。
-                                2. **严禁**使用列表、要点或分行。
-                                3. 严格遵循用户反馈进行调整。
+                                {CLEAN_OUTPUT_RULES}
                                 """
                                 revised_text = get_gemini_response(revise_prompt)
-                                st.session_state['generated_sections'][module] = revised_text
+                                st.session_state['generated_sections'][module] = revised_text.strip()
                                 st.rerun()
 
     # ==========================================
-    # 8. 最终导出
+    # 8. 导出
     # ==========================================
     st.markdown("---")
     st.header("5️⃣ 最终导出")
@@ -277,13 +285,13 @@ if st.session_state.get('generated_sections'):
     full_text = ""
     for module in display_order:
         if module in st.session_state['generated_sections']:
-            full_text += f"【{modules[module]}】\n"
+            # 导出时也不带标题，只带纯文本，或者你可以选择带上简单的标记
             full_text += st.session_state['generated_sections'][module] + "\n\n"
             
     st.download_button(
-        label="📥 下载完整文书 (.txt)",
+        label="📥 下载纯净文书 (.txt)",
         data=full_text,
-        file_name=f"Personal_Statement_{target_school_name}.txt",
+        file_name=f"PS_{target_school_name}.txt",
         mime="text/plain",
         type="primary"
     )
