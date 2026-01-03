@@ -1,12 +1,3 @@
-这是 **v12.0 版本**。
-
-我在代码中增加了版本号显示功能：
-1.  **主标题**：现在标题会显示 `v12.0`。
-2.  **侧边栏底部**：增加了一个关于信息的区域，显示版本号和当前构建信息。
-
-请复制以下完整代码覆盖 `app.py`：
-
-```python
 import streamlit as st
 import google.generativeai as genai
 from PIL import Image
@@ -333,3 +324,4 @@ if st.session_state.get('generated_sections'):
         mime="text/plain",
         type="primary"
     )
+
