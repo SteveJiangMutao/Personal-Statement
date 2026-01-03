@@ -14,11 +14,11 @@ def get_app_version():
     try:
         timestamp = os.path.getmtime(__file__)
         dt = datetime.fromtimestamp(timestamp)
-        # 格式：v13.2.月日.时分
+        # 格式：v13.3.月日.时分
         build_ver = dt.strftime('%m%d.%H%M')
-        return f"v13.2.{build_ver}", dt.strftime('%Y-%m-%d %H:%M:%S')
+        return f"v13.3.{build_ver}", dt.strftime('%Y-%m-%d %H:%M:%S')
     except Exception:
-        return "v13.2.Dev", "Unknown"
+        return "v13.3.Dev", "Unknown"
 
 current_version, last_updated_time = get_app_version()
 
@@ -38,12 +38,18 @@ st.title(f"留学文书辅助写作工具 {current_version}")
 st.markdown("---")
 
 # ==========================================
-# 2. 系统设置
+# 2. 系统设置 (修改点：改为手动输入 Key)
 # ==========================================
 with st.sidebar:
     st.header("系统设置")
-    api_key = "AIzaSyDQ51jjPXsbeboTG-qrpgvy-HAtM-NYHpU"
-    st.success("Key 已内置")
+    
+    # --- 安全修复：输入框替代硬编码 ---
+    api_key = st.text_input("🔑 请输入 Google API Key", type="password", help="原 Key 已失效，请在 Google AI Studio 申请新 Key")
+    
+    if not api_key:
+        st.warning("⚠️ 请先输入 API Key 才能开始")
+    else:
+        st.success("✅ Key 已就绪")
     
     model_name = st.selectbox("选择模型", ["gemini-3-pro-preview"], index=0)
     
@@ -51,7 +57,7 @@ with st.sidebar:
     st.markdown("### 关于")
     st.info(f"**当前版本:** {current_version}")
     st.caption(f"**最后更新:** {last_updated_time}")
-    st.caption("**Fix:** 修复文本框内容不刷新Bug / 强制状态同步")
+    st.caption("**Fix:** 修复 API Key 泄露问题 / 增加 Key 输入框")
 
 # ==========================================
 # 3. 核心函数
@@ -67,6 +73,9 @@ def read_word_file(file):
         return f"Error reading Word file: {e}"
 
 def get_gemini_response(prompt, media_content=None, text_context=None):
+    if not api_key:
+        return "Error: 请先在左侧侧边栏输入 API Key"
+        
     genai.configure(api_key=api_key)
     model = genai.GenerativeModel(model_name)
     
@@ -180,6 +189,10 @@ Translate the provided Chinese text into a professional English Personal Stateme
 """
 
 if st.button("开始生成初稿", type="primary"):
+    if not api_key:
+        st.error("❌ 请先在左侧侧边栏输入有效的 Google API Key")
+        st.stop()
+
     has_curriculum = target_curriculum_text or uploaded_curriculum_images
     
     if not uploaded_word or not uploaded_transcript or not has_curriculum:
@@ -298,8 +311,7 @@ if st.button("开始生成初稿", type="primary"):
         # 1. 更新后端数据
         st.session_state['generated_sections'][module] = res.strip()
         
-        # 2. 【关键修复】强制更新文本框的 Session State Key
-        # 这样下次渲染 text_area 时，它会被迫显示最新的值
+        # 2. 强制更新文本框的 Session State Key
         if f"text_{module}" in st.session_state:
             st.session_state[f"text_{module}"] = res.strip()
         
@@ -331,22 +343,17 @@ if st.session_state.get('generated_sections'):
                 with c1:
                     st.markdown("**中文草稿 (可编辑)**")
                     
-                    # 确保文本框的初始值是最新的
-                    # 如果 key 不在 session_state 中，初始化它
                     if f"text_{module}" not in st.session_state:
                         st.session_state[f"text_{module}"] = st.session_state['generated_sections'][module]
                     
-                    # 渲染文本框，直接绑定到 session_state key
                     current_content = st.text_area(
                         f"中文内容 - {module}", 
                         key=f"text_{module}",
                         height=250
                     )
                     
-                    # 实时同步：如果用户手动编辑了，更新 generated_sections
                     st.session_state['generated_sections'][module] = current_content
 
-                    # 修改建议区
                     fb_col1, fb_col2 = st.columns([3, 1])
                     with fb_col1:
                         feedback = st.text_input(f"修改建议 ({modules[module]}):", key=f"fb_{module}")
@@ -355,38 +362,38 @@ if st.session_state.get('generated_sections'):
                             if not feedback:
                                 st.warning("请输入建议")
                             else:
-                                with st.spinner("正在重写..."):
-                                    revise_prompt = f"""
-                                    【任务】根据反馈修改段落。
-                                    【原段落】{current_content}
-                                    【用户反馈】{feedback}
-                                    {CLEAN_OUTPUT_RULES}
-                                    """
-                                    revised_text = get_gemini_response(revise_prompt)
-                                    
-                                    # 1. 更新后端数据
-                                    st.session_state['generated_sections'][module] = revised_text.strip()
-                                    
-                                    # 2. 【关键修复】强制更新文本框的 key，确保 UI 刷新
-                                    st.session_state[f"text_{module}"] = revised_text.strip()
-                                    
-                                    # 3. 清空翻译
-                                    if module in st.session_state['translated_sections']:
-                                        del st.session_state['translated_sections'][module]
-                                    
-                                    st.rerun()
+                                if not api_key:
+                                    st.error("需要 API Key")
+                                else:
+                                    with st.spinner("正在重写..."):
+                                        revise_prompt = f"""
+                                        【任务】根据反馈修改段落。
+                                        【原段落】{current_content}
+                                        【用户反馈】{feedback}
+                                        {CLEAN_OUTPUT_RULES}
+                                        """
+                                        revised_text = get_gemini_response(revise_prompt)
+                                        
+                                        st.session_state['generated_sections'][module] = revised_text.strip()
+                                        st.session_state[f"text_{module}"] = revised_text.strip()
+                                        
+                                        if module in st.session_state['translated_sections']:
+                                            del st.session_state['translated_sections'][module]
+                                        
+                                        st.rerun()
 
                 with c2:
                     st.markdown("**英文翻译 (Translation)**")
                     
                     if st.button(f"🇺🇸 翻译为英文", key=f"trans_btn_{module}"):
-                        with st.spinner("Translating with strict rules..."):
-                            # 使用当前文本框里的内容（无论是AI写的还是人改的）
-                            content_to_translate = st.session_state[f"text_{module}"]
-                            
-                            full_trans_prompt = f"{TRANSLATION_RULES}\n{content_to_translate}"
-                            trans_res = get_gemini_response(full_trans_prompt)
-                            st.session_state['translated_sections'][module] = trans_res.strip()
+                        if not api_key:
+                            st.error("需要 API Key")
+                        else:
+                            with st.spinner("Translating..."):
+                                content_to_translate = st.session_state[f"text_{module}"]
+                                full_trans_prompt = f"{TRANSLATION_RULES}\n{content_to_translate}"
+                                trans_res = get_gemini_response(full_trans_prompt)
+                                st.session_state['translated_sections'][module] = trans_res.strip()
                     
                     if module in st.session_state['translated_sections']:
                         st.markdown(st.session_state['translated_sections'][module])
