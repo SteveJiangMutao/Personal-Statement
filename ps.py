@@ -1,3 +1,12 @@
+这是 **v12.0 版本**。
+
+我在代码中增加了版本号显示功能：
+1.  **主标题**：现在标题会显示 `v12.0`。
+2.  **侧边栏底部**：增加了一个关于信息的区域，显示版本号和当前构建信息。
+
+请复制以下完整代码覆盖 `app.py`：
+
+```python
 import streamlit as st
 import google.generativeai as genai
 from PIL import Image
@@ -7,25 +16,33 @@ import io
 # ==========================================
 # 1. 页面基础配置
 # ==========================================
-st.set_page_config(page_title="个人陈述写作辅助工具", page_icon="✍️", layout="wide")
+# 在浏览器标签页标题中显示版本
+st.set_page_config(page_title="AI 留学文书深度生成器 v12.0", page_icon="✍️", layout="wide")
 
 if 'generated_sections' not in st.session_state:
     st.session_state['generated_sections'] = {}
 if 'step' not in st.session_state:
     st.session_state['step'] = 1
 
-st.title("✍️ AI 留学文书深度生成器 (全能输入版)")
+# --- 修改点：主界面标题显示版本号 ---
+st.title("✍️ AI 留学文书深度生成器 v12.0")
 st.markdown("---")
 
 # ==========================================
-# 2. 系统设置 (内置 Key)
+# 2. 系统设置 (内置 Key & 版本信息)
 # ==========================================
 with st.sidebar:
     st.header("⚙️ 系统设置")
     api_key = "AIzaSyDQ51jjPXsbeboTG-qrpgvy-HAtM-NYHpU"
     st.success("✅ Key 已内置")
-    # 必须使用 Pro 模型以处理 PDF 和多图
+    
     model_name = st.selectbox("选择模型", ["gemini-1.5-pro", "gemini-3-pro-preview"], index=0)
+    
+    # --- 修改点：侧边栏底部显示版本详情 ---
+    st.markdown("---")
+    st.markdown("### ℹ️ 关于")
+    st.caption("**Version:** v12.0 (Pro)")
+    st.caption("**Update:** 支持PDF成绩单 / 混合课程输入 / 纯净输出模式")
 
 # ==========================================
 # 3. 核心函数
@@ -77,7 +94,7 @@ with col1:
     st.subheader("📂 学生素材")
     uploaded_word = st.file_uploader("上传文书信息收集表 (.docx)", type=['docx'])
     
-    # --- 修改点：支持 PDF 和 图片 ---
+    # 支持 PDF 和 图片
     uploaded_transcript = st.file_uploader("上传成绩单 (支持 截图 或 PDF)", type=['png', 'jpg', 'jpeg', 'pdf'])
 
 with col2:
@@ -141,13 +158,11 @@ if st.button("🚀 开始生成初稿", type="primary"):
     # --- 1. 处理成绩单 (PDF 或 图片) ---
     transcript_content = []
     if uploaded_transcript.type == "application/pdf":
-        # 如果是 PDF，构造 Gemini 专用的数据字典
         transcript_content.append({
             "mime_type": "application/pdf",
             "data": uploaded_transcript.getvalue()
         })
     else:
-        # 如果是图片，使用 PIL 打开
         transcript_content.append(Image.open(uploaded_transcript))
 
     # --- 2. 处理课程截图 (图片列表) ---
@@ -252,9 +267,9 @@ if st.button("🚀 开始生成初稿", type="primary"):
         # 决定传入哪组多媒体内容
         current_media = None
         if module == "Academic":
-            current_media = transcript_content # 传入处理好的 PDF字典 或 图片对象列表
+            current_media = transcript_content
         elif module == "Why_School":
-            current_media = curriculum_imgs # 传入课程图片列表
+            current_media = curriculum_imgs
         
         res = get_gemini_response(prompts_map[module], media_content=current_media, text_context=word_content)
         
