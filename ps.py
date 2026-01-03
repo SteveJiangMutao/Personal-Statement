@@ -15,11 +15,11 @@ def get_app_version():
     try:
         timestamp = os.path.getmtime(__file__)
         dt = datetime.fromtimestamp(timestamp)
-        # 格式：v13.10.月日.时分
+        # 格式：v13.11.月日.时分
         build_ver = dt.strftime('%m%d.%H%M')
-        return f"v13.10.{build_ver}", dt.strftime('%Y-%m-%d %H:%M:%S')
+        return f"v13.11.{build_ver}", dt.strftime('%Y-%m-%d %H:%M:%S')
     except Exception:
-        return "v13.10.Dev", "Unknown"
+        return "v13.11.Dev", "Unknown"
 
 current_version, last_updated_time = get_app_version()
 
@@ -59,7 +59,7 @@ with st.sidebar:
     st.markdown("### 关于")
     st.info(f"**当前版本:** {current_version}")
     st.caption(f"**最后更新:** {last_updated_time}")
-    st.caption("**Update:** UI 重构：三栏式信息采集")
+    st.caption("**Update:** 新增“局部精修”交互模式")
 
 # ==========================================
 # 3. 核心函数
@@ -110,50 +110,38 @@ def get_gemini_response(prompt, media_content=None, text_context=None):
         return f"Error: {str(e)}"
 
 # ==========================================
-# 4. 界面：信息采集 (UI 重构版)
+# 4. 界面：信息采集 (三栏布局)
 # ==========================================
 st.header("1. 信息采集与素材上传")
 
-# 使用三列布局
 col_student, col_counselor, col_target = st.columns(3)
 
-# --- 第一栏：学生提供信息 ---
 with col_student:
     st.markdown("### 🧑‍🎓 学生提供信息")
     st.caption("上传简历、素材表与成绩单")
-    
     uploaded_material = st.file_uploader("📄 文书素材/简历 (Word/PDF)", type=['docx', 'pdf'])
     uploaded_transcript = st.file_uploader("🎓 成绩单 (截图/PDF)", type=['png', 'jpg', 'jpeg', 'pdf'])
 
-# --- 第二栏：顾问指导意见 ---
 with col_counselor:
     st.markdown("### 👨‍🏫 顾问指导意见")
     st.caption("设定文书的整体策略与调性")
-    
     counselor_strategy = st.text_area(
         "💡 写作策略/人设强调", 
         height=200, 
         placeholder="例如：\n1. 强调量化背景\n2. 解释GPA劣势\n3. 突出某段实习的领导力..."
     )
 
-# --- 第三栏：目标专业信息 ---
 with col_target:
     st.markdown("### 🏫 目标专业信息")
     st.caption("输入目标学校与课程设置")
-    
     target_school_name = st.text_input("🏛️ 目标学校 & 专业", placeholder="例如：UCL - MSc Business Analytics")
-    
     st.markdown("**课程设置 (Curriculum):**")
-    # 使用 Tabs 节省空间
     tab_text, tab_img = st.tabs(["文本粘贴", "图片上传"])
-    
     with tab_text:
         target_curriculum_text = st.text_area("粘贴课程列表", height=100, placeholder="Core Modules: ...")
-    
     with tab_img:
         uploaded_curriculum_images = st.file_uploader("上传课程截图", type=['png', 'jpg', 'jpeg'], accept_multiple_files=True)
 
-# 读取素材文本 (逻辑保持不变)
 student_background_text = ""
 if uploaded_material:
     if uploaded_material.name.endswith('.docx'):
@@ -183,7 +171,6 @@ selected_modules = st.multiselect("选择模块：", list(modules.keys()), forma
 st.markdown("---")
 st.header("3. 一键点击创作")
 
-# 通用规则
 CLEAN_OUTPUT_RULES = """
 【🚨 绝对输出规则】
 1. 只输出正文内容本身。
@@ -193,7 +180,6 @@ CLEAN_OUTPUT_RULES = """
 5. 必须写成一个完整的、连贯的中文自然段。
 """
 
-# --- 翻译规则 v13.9 (保持不变) ---
 TRANSLATION_RULES = """
 【Translation Task】
 Translate the provided Chinese text into a professional, human-sounding Personal Statement paragraph.
@@ -205,10 +191,10 @@ Translate the provided Chinese text into a professional, human-sounding Personal
 
 2. **SEMICOLONS (;) FOR FLOW**:
    - **MANDATORY**: When a sentence is grammatically complete but the thought is not finished (and leads directly into the next point), use a **semicolon (;)** to connect them.
-   - *Example*: "The model failed initially; this failure forced me to re-evaluate the parameters." (Instead of "The model failed initially. This failure..." or "The model failed, thereby forcing...")
+   - *Example*: "The model failed initially; this failure forced me to re-evaluate the parameters."
 
 3. **ADVERB CONTROL (Nuanced)**:
-   - **STRICTLY PROHIBITED**: Adverbs placed immediately before verbs or adjectives to intensify them (e.g., "deeply analyze", "perfectly align", "acutely aware", "carefully examined"). Use stronger verbs instead (e.g., "scrutinized" instead of "carefully examined").
+   - **STRICTLY PROHIBITED**: Adverbs placed immediately before verbs or adjectives to intensify them (e.g., "deeply analyze", "perfectly align").
    - **ALLOWED**: "Robust" and "scalable" are permitted.
 
 4. **VOCABULARY PURGE**: 
@@ -260,10 +246,8 @@ if st.button("开始生成初稿", type="primary"):
     current_step = 0
 
     # --- Prompt 定义 ---
-
     prompt_motivation = f"""
     【任务】撰写 Personal Statement 的 "申请动机" 部分。
-    
     【步骤 1：深度调研】
     请先分析 {target_school_name} 所在领域的最新行业热点或学术趋势（列出 2-3 个）。
     **必须提供具体信息源**：
@@ -271,18 +255,14 @@ if st.button("开始生成初稿", type="primary"):
     - 知名咨询机构报告名称 (如 McKinsey, Deloitte, Gartner)
     - 权威科技/商业新闻源 (如 TechCrunch, Bloomberg, Nature)
     - 简述该趋势与学生背景的关联。
-
     【步骤 2：撰写正文】
     基于上述趋势和学生素材，撰写一段中文申请动机。
     逻辑：学生过往经历 -> 观察到的行业痛点/趋势 -> 产生深造需求。
-
     【🚨 严格输出格式】
     请严格按照下方分隔符输出，不要包含其他内容：
-
     [TRENDS_START]
     (在此处列出调研的趋势和具体来源链接/标题)
     [TRENDS_END]
-
     [DRAFT_START]
     (在此处撰写正文段落，纯文本，无Markdown)
     [DRAFT_END]
@@ -306,13 +286,11 @@ if st.button("开始生成初稿", type="primary"):
     - 目标专业: {target_school_name}
     - 核心依据 (成绩单): 见附带文件 (PDF或图片)
     - 辅助参考 (学生素材/简历): 见附带文本
-    
     【核心原则：深度 > 数量】
     不要罗列课程名。只精选 **2-3 门** 与目标专业最强相关的核心课程进行深度描写。
-
     【内容要求 - 必须包含细节】
-    1. **核心概念植入**：在描述每门课时，必须提及该课程具体的**核心概念、模型、算法或理论名称**（例如：不要只说“学了统计学”，要说“掌握了假设检验(Hypothesis Testing)和多元回归分析(Multiple Regression)”）。
-    2. **学术真实感**：结合学生素材，简述是如何理解或应用这些概念的（例如：通过期末项目、实验报告或特定课题）。
+    1. **核心概念植入**：在描述每门课时，必须提及该课程具体的**核心概念、模型、算法或理论名称**。
+    2. **学术真实感**：结合学生素材，简述是如何理解或应用这些概念的。
     3. **逻辑升华**：说明这些具体的知识点如何为你攻读 {target_school_name} 打下了坚实的学术基础。
     4. **禁止**：禁止写成课程清单（List），必须是连贯的学术反思叙述。
     {CLEAN_OUTPUT_RULES}
@@ -325,7 +303,6 @@ if st.button("开始生成初稿", type="primary"):
     - 顾问思路: {counselor_strategy}
     {f'【目标课程文本列表】:{target_curriculum_text}' if target_curriculum_text else ''}
     - 课程图片信息: 见附带图片
-    
     【内容要求】
     1. 综合分析提供的文本列表和图片中的课程信息。
     2. 从中挑选 3-4 门与学生背景或规划最相关的特定课程。
@@ -393,12 +370,12 @@ if st.button("开始生成初稿", type="primary"):
     st.success("初稿生成完毕！")
 
 # ==========================================
-# 7. 界面：反馈、修改与翻译
+# 7. 界面：反馈、修改与翻译 (交互升级)
 # ==========================================
 if st.session_state.get('generated_sections'):
     st.markdown("---")
     st.header("4. 审阅、精修与翻译")
-    st.info("👇 左侧为中文初稿，修改满意后可点击右侧按钮进行翻译。")
+    st.info("👇 左侧为中文初稿，支持【局部精修】；右侧为英文翻译。")
 
     display_order = ["Motivation", "Academic", "Internship", "Why_School", "Career_Goal"]
     
@@ -413,6 +390,7 @@ if st.session_state.get('generated_sections'):
                 
                 c1, c2 = st.columns([1, 1])
                 
+                # --- 左侧：中文编辑与精修 ---
                 with c1:
                     st.markdown("**中文草稿 (可编辑)**")
                     
@@ -424,37 +402,77 @@ if st.session_state.get('generated_sections'):
                         key=f"text_{module}",
                         height=250
                     )
-                    
                     st.session_state['generated_sections'][module] = current_content
 
-                    fb_col1, fb_col2 = st.columns([3, 1])
-                    with fb_col1:
-                        feedback = st.text_input(f"修改建议 ({modules[module]}):", key=f"fb_{module}")
-                    with fb_col2:
-                        if st.button(f"🔄 AI重写", key=f"btn_{module}"):
-                            if not feedback:
-                                st.warning("请输入建议")
-                            else:
-                                if not api_key:
-                                    st.error("需要 API Key")
+                    # --- 交互升级：局部精修面板 ---
+                    with st.expander("🛠️ 修改工具箱 (点击展开)", expanded=True):
+                        tab_global, tab_local = st.tabs(["全局重写", "🔍 局部/细节精修"])
+                        
+                        # Tab 1: 全局重写
+                        with tab_global:
+                            st.caption("针对整段文字的风格或内容调整")
+                            fb_global = st.text_input(f"整体修改意见 ({modules[module]})", key=f"fb_glob_{module}")
+                            if st.button("🔄 全局重写", key=f"btn_glob_{module}"):
+                                if not fb_global:
+                                    st.warning("请输入修改意见")
                                 else:
-                                    with st.spinner("正在重写..."):
+                                    with st.spinner("正在全局重写..."):
                                         revise_prompt = f"""
-                                        【任务】根据反馈修改段落。
+                                        【任务】根据反馈重写整段内容。
                                         【原段落】{current_content}
-                                        【用户反馈】{feedback}
+                                        【用户反馈】{fb_global}
                                         {CLEAN_OUTPUT_RULES}
                                         """
                                         revised_text = get_gemini_response(revise_prompt)
-                                        
-                                        st.session_state['generated_sections'][module] = revised_text.strip()
                                         st.session_state[f"text_{module}"] = revised_text.strip()
-                                        
+                                        st.session_state['generated_sections'][module] = revised_text.strip()
                                         if module in st.session_state['translated_sections']:
                                             del st.session_state['translated_sections'][module]
-                                        
                                         st.rerun()
 
+                        # Tab 2: 局部精修 (模拟批注)
+                        with tab_local:
+                            st.caption("💡 类似 Word 批注：复制上方文本框中你想改的那句话，粘贴到下方，然后写要求。")
+                            col_target_text, col_instruction = st.columns(2)
+                            with col_target_text:
+                                target_segment = st.text_input("🎯 粘贴想修改的原文片段", key=f"target_{module}")
+                            with col_instruction:
+                                local_instruction = st.text_input("✍️ 怎么改？(批注)", key=f"instr_{module}")
+                            
+                            if st.button("✨ 仅修改选中部分", key=f"btn_loc_{module}"):
+                                if not target_segment or not local_instruction:
+                                    st.warning("请填写原文片段和修改意见")
+                                else:
+                                    with st.spinner("正在进行局部精修..."):
+                                        # 局部精修 Prompt
+                                        partial_revise_prompt = f"""
+                                        【任务】对文书段落进行局部精修 (Partial Revision)。
+                                        
+                                        【完整原文】:
+                                        {current_content}
+                                        
+                                        【用户锁定的原文片段 (Target Segment)】:
+                                        "{target_segment}"
+                                        
+                                        【用户的修改批注 (Instruction)】:
+                                        "{local_instruction}"
+                                        
+                                        【执行步骤】:
+                                        1. 在完整原文中定位该片段（如果片段有轻微差异，请根据上下文模糊匹配）。
+                                        2. 仅针对该片段应用用户的修改意见，重写该句子。
+                                        3. 保持段落其他部分不变，确保修改后的句子与上下文衔接流畅。
+                                        4. 输出修改后的完整段落。
+                                        
+                                        {CLEAN_OUTPUT_RULES}
+                                        """
+                                        revised_text = get_gemini_response(partial_revise_prompt)
+                                        st.session_state[f"text_{module}"] = revised_text.strip()
+                                        st.session_state['generated_sections'][module] = revised_text.strip()
+                                        if module in st.session_state['translated_sections']:
+                                            del st.session_state['translated_sections'][module]
+                                        st.rerun()
+
+                # --- 右侧：英文翻译 ---
                 with c2:
                     st.markdown("**英文翻译 (Translation)**")
                     
