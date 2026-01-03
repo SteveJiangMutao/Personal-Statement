@@ -6,6 +6,7 @@ import PyPDF2
 import io
 import os
 import time
+import random
 from datetime import datetime
 
 # ==========================================
@@ -15,11 +16,11 @@ def get_app_version():
     try:
         timestamp = os.path.getmtime(__file__)
         dt = datetime.fromtimestamp(timestamp)
-        # 格式：v13.11.月日.时分
+        # 格式：v13.12.月日.时分
         build_ver = dt.strftime('%m%d.%H%M')
-        return f"v13.11.{build_ver}", dt.strftime('%Y-%m-%d %H:%M:%S')
+        return f"v13.12.{build_ver}", dt.strftime('%Y-%m-%d %H:%M:%S')
     except Exception:
-        return "v13.11.Dev", "Unknown"
+        return "v13.12.Dev", "Unknown"
 
 current_version, last_updated_time = get_app_version()
 
@@ -28,14 +29,15 @@ current_version, last_updated_time = get_app_version()
 # ==========================================
 st.set_page_config(page_title=f"留学文书工具 {current_version}", layout="wide")
 
+# 初始化 Session State
 if 'generated_sections' not in st.session_state:
     st.session_state['generated_sections'] = {}
 if 'motivation_trends' not in st.session_state:
     st.session_state['motivation_trends'] = ""
 if 'translated_sections' not in st.session_state:
     st.session_state['translated_sections'] = {}
-if 'step' not in st.session_state:
-    st.session_state['step'] = 1
+if 'chat_histories' not in st.session_state:
+    st.session_state['chat_histories'] = {} # 存储每个模块的聊天记录
 
 st.title(f"留学文书辅助写作工具 {current_version}")
 st.markdown("---")
@@ -59,7 +61,7 @@ with st.sidebar:
     st.markdown("### 关于")
     st.info(f"**当前版本:** {current_version}")
     st.caption(f"**最后更新:** {last_updated_time}")
-    st.caption("**Update:** 新增“局部精修”交互模式")
+    st.caption("**Update:** 新增右侧 AI 灵感助手 (Chat)")
 
 # ==========================================
 # 3. 核心函数
@@ -108,6 +110,22 @@ def get_gemini_response(prompt, media_content=None, text_context=None):
         return response.text
     except Exception as e:
         return f"Error: {str(e)}"
+
+# --- 幽默加载语库 ---
+FUNNY_LOADING_MESSAGES = [
+    "☕️ 正在煮咖啡，顺便思考一下人生...",
+    "🧠 正在和 Google 总部的服务器进行脑电波对接...",
+    "🚀 正在以此生最快的速度翻阅整个互联网...",
+    "🐢 别急，AI 也是需要喘口气的...",
+    "🔥 为了这个问题，由于计算量过大，显卡正在微微发烫...",
+    "🧙‍♂️ 正在召唤数据魔法...",
+    "🧐 正在假装很深沉地思考...",
+    "💾 正在从赛博空间的角落里打捞数据...",
+    "✨ 灵感正在加载中，进度 99%..."
+]
+
+def get_random_loading_msg():
+    return random.choice(FUNNY_LOADING_MESSAGES)
 
 # ==========================================
 # 4. 界面：信息采集 (三栏布局)
@@ -370,12 +388,12 @@ if st.button("开始生成初稿", type="primary"):
     st.success("初稿生成完毕！")
 
 # ==========================================
-# 7. 界面：反馈、修改与翻译 (交互升级)
+# 7. 界面：反馈、修改与翻译 (交互升级 + 灵感助手)
 # ==========================================
 if st.session_state.get('generated_sections'):
     st.markdown("---")
     st.header("4. 审阅、精修与翻译")
-    st.info("👇 左侧为中文初稿，支持【局部精修】；右侧为英文翻译。")
+    st.info("👇 左侧为中文初稿，支持【局部精修】；右侧可选【英文翻译】或【灵感助手】。")
 
     display_order = ["Motivation", "Academic", "Internship", "Why_School", "Career_Goal"]
     
@@ -400,18 +418,16 @@ if st.session_state.get('generated_sections'):
                     current_content = st.text_area(
                         f"中文内容 - {module}", 
                         key=f"text_{module}",
-                        height=250
+                        height=350
                     )
                     st.session_state['generated_sections'][module] = current_content
 
-                    # --- 交互升级：局部精修面板 ---
-                    with st.expander("🛠️ 修改工具箱 (点击展开)", expanded=True):
+                    # --- 局部精修面板 ---
+                    with st.expander("🛠️ 修改工具箱", expanded=False):
                         tab_global, tab_local = st.tabs(["全局重写", "🔍 局部/细节精修"])
                         
-                        # Tab 1: 全局重写
                         with tab_global:
-                            st.caption("针对整段文字的风格或内容调整")
-                            fb_global = st.text_input(f"整体修改意见 ({modules[module]})", key=f"fb_glob_{module}")
+                            fb_global = st.text_input(f"整体修改意见", key=f"fb_glob_{module}")
                             if st.button("🔄 全局重写", key=f"btn_glob_{module}"):
                                 if not fb_global:
                                     st.warning("请输入修改意见")
@@ -430,39 +446,29 @@ if st.session_state.get('generated_sections'):
                                             del st.session_state['translated_sections'][module]
                                         st.rerun()
 
-                        # Tab 2: 局部精修 (模拟批注)
                         with tab_local:
-                            st.caption("💡 类似 Word 批注：复制上方文本框中你想改的那句话，粘贴到下方，然后写要求。")
+                            st.caption("复制上方你想改的那句话，粘贴到下方，然后写要求。")
                             col_target_text, col_instruction = st.columns(2)
                             with col_target_text:
-                                target_segment = st.text_input("🎯 粘贴想修改的原文片段", key=f"target_{module}")
+                                target_segment = st.text_input("🎯 粘贴原文片段", key=f"target_{module}")
                             with col_instruction:
-                                local_instruction = st.text_input("✍️ 怎么改？(批注)", key=f"instr_{module}")
+                                local_instruction = st.text_input("✍️ 怎么改？", key=f"instr_{module}")
                             
                             if st.button("✨ 仅修改选中部分", key=f"btn_loc_{module}"):
                                 if not target_segment or not local_instruction:
                                     st.warning("请填写原文片段和修改意见")
                                 else:
                                     with st.spinner("正在进行局部精修..."):
-                                        # 局部精修 Prompt
                                         partial_revise_prompt = f"""
-                                        【任务】对文书段落进行局部精修 (Partial Revision)。
-                                        
-                                        【完整原文】:
-                                        {current_content}
-                                        
-                                        【用户锁定的原文片段 (Target Segment)】:
-                                        "{target_segment}"
-                                        
-                                        【用户的修改批注 (Instruction)】:
-                                        "{local_instruction}"
-                                        
-                                        【执行步骤】:
-                                        1. 在完整原文中定位该片段（如果片段有轻微差异，请根据上下文模糊匹配）。
-                                        2. 仅针对该片段应用用户的修改意见，重写该句子。
-                                        3. 保持段落其他部分不变，确保修改后的句子与上下文衔接流畅。
+                                        【任务】对文书段落进行局部精修。
+                                        【完整原文】{current_content}
+                                        【用户锁定的原文片段】"{target_segment}"
+                                        【用户的修改批注】"{local_instruction}"
+                                        【执行步骤】
+                                        1. 在完整原文中定位该片段。
+                                        2. 仅针对该片段应用用户的修改意见。
+                                        3. 保持段落其他部分不变。
                                         4. 输出修改后的完整段落。
-                                        
                                         {CLEAN_OUTPUT_RULES}
                                         """
                                         revised_text = get_gemini_response(partial_revise_prompt)
@@ -472,24 +478,72 @@ if st.session_state.get('generated_sections'):
                                             del st.session_state['translated_sections'][module]
                                         st.rerun()
 
-                # --- 右侧：英文翻译 ---
+                # --- 右侧：翻译 与 灵感助手 (Tabs) ---
                 with c2:
-                    st.markdown("**英文翻译 (Translation)**")
+                    tab_trans, tab_chat = st.tabs(["🇺🇸 英文翻译", "🤖 灵感助手 (Chat)"])
                     
-                    if st.button(f"🇺🇸 翻译为英文", key=f"trans_btn_{module}"):
-                        if not api_key:
-                            st.error("需要 API Key")
+                    # Tab 1: 翻译
+                    with tab_trans:
+                        st.markdown("**英文翻译结果**")
+                        if st.button(f"🚀 翻译此段", key=f"trans_btn_{module}"):
+                            if not api_key:
+                                st.error("需要 API Key")
+                            else:
+                                with st.spinner("Translating..."):
+                                    content_to_translate = st.session_state[f"text_{module}"]
+                                    full_trans_prompt = f"{TRANSLATION_RULES}\n{content_to_translate}"
+                                    trans_res = get_gemini_response(full_trans_prompt)
+                                    st.session_state['translated_sections'][module] = trans_res.strip()
+                        
+                        if module in st.session_state['translated_sections']:
+                            st.markdown(st.session_state['translated_sections'][module])
+                            st.caption("💡 提示：如果修改了左侧中文，请重新点击翻译按钮。")
                         else:
-                            with st.spinner("Translating..."):
-                                content_to_translate = st.session_state[f"text_{module}"]
-                                full_trans_prompt = f"{TRANSLATION_RULES}\n{content_to_translate}"
-                                trans_res = get_gemini_response(full_trans_prompt)
-                                st.session_state['translated_sections'][module] = trans_res.strip()
-                    
-                    if module in st.session_state['translated_sections']:
-                        st.markdown(st.session_state['translated_sections'][module])
-                    else:
-                        st.caption("点击上方按钮生成英文翻译")
+                            st.info("👈 满意左侧中文稿后，点击上方按钮生成翻译。")
+
+                    # Tab 2: 灵感助手 (Chat)
+                    with tab_chat:
+                        st.caption("🤔 遇到卡顿？在这里查资料、问同义词或寻找灵感。")
+                        
+                        # 初始化该模块的聊天记录
+                        if module not in st.session_state['chat_histories']:
+                            st.session_state['chat_histories'][module] = []
+                        
+                        # 显示历史记录
+                        chat_container = st.container(height=250)
+                        with chat_container:
+                            for msg in st.session_state['chat_histories'][module]:
+                                with st.chat_message(msg["role"]):
+                                    st.markdown(msg["content"])
+                        
+                        # 输入框
+                        user_query = st.text_input(f"向助手提问 ({modules[module]})", key=f"chat_in_{module}")
+                        
+                        if st.button("发送", key=f"chat_send_{module}"):
+                            if not user_query:
+                                st.warning("请输入问题")
+                            elif not api_key:
+                                st.error("需要 API Key")
+                            else:
+                                # 记录用户提问
+                                st.session_state['chat_histories'][module].append({"role": "user", "content": user_query})
+                                
+                                # 随机幽默加载语
+                                loading_msg = get_random_loading_msg()
+                                
+                                with st.spinner(loading_msg):
+                                    # 调用 API
+                                    chat_prompt = f"""
+                                    你是一个专业的留学文书助手。用户正在撰写 '{modules[module]}' 部分。
+                                    用户的问题是：{user_query}
+                                    请提供简短、专业且有帮助的回答。
+                                    """
+                                    ai_reply = get_gemini_response(chat_prompt)
+                                    
+                                    # 记录 AI 回答
+                                    st.session_state['chat_histories'][module].append({"role": "assistant", "content": ai_reply})
+                                    
+                                    st.rerun()
 
     # ==========================================
     # 8. 导出
