@@ -25,7 +25,7 @@ with st.sidebar:
     api_key = "AIzaSyDQ51jjPXsbeboTG-qrpgvy-HAtM-NYHpU"
     st.success("✅ Key 已内置")
     # 必须使用 Pro 模型以处理多图和长文本
-    model_name = st.selectbox("选择模型", ["gemini-1.5-pro", "gemini-3-pro-preview"], index=0)
+    model_name = st.selectbox("选择模型", ["gemini-3-pro-preview"], index=0)
 
 # ==========================================
 # 3. 核心函数
@@ -305,3 +305,4 @@ if st.session_state.get('generated_sections'):
         mime="text/plain",
         type="primary"
     )
+
