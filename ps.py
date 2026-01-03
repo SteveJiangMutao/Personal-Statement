@@ -27,7 +27,7 @@ with st.sidebar:
     api_key = "AIzaSyDQ51jjPXsbeboTG-qrpgvy-HAtM-NYHpU"
     st.success("✅ Key 已内置")
     
-    model_name = st.selectbox("选择模型", ["gemini-1.5-pro", "gemini-3-pro-preview"], index=0)
+    model_name = st.selectbox("选择模型", ["gemini-3-pro-preview"], index=0)
     
     # --- 修改点：侧边栏底部显示版本详情 ---
     st.markdown("---")
@@ -113,7 +113,7 @@ modules = {
     "Motivation": "申请动机",
     "Academic": "本科学习经历",
     "Internship": "实习/工作经历",
-    "Why_School": "Why School (基于课程)",
+    "Why_School": "Why School",
     "Career_Goal": "职业规划"
 }
 
@@ -177,8 +177,8 @@ if st.button("🚀 开始生成初稿", type="primary"):
     - 学生素材: 见附带文本
     【内容要求】
     1. 提取素材中触发兴趣的经历。
-    2. 结合 {target_school_name} 所在领域的行业热点。
-    3. 逻辑连接：兴趣 -> 热点 -> 申请必要性。
+    2. 结合 {target_school_name} 所在领域的研究热点或行业动态。
+    3. 逻辑连接：兴趣 -> 热点 -> 申请必要性，需要提炼出在本科教育基础之上学生还想通过硕士学位探索哪一细分领域。
     4. 语气简洁凝练，开门见山。
     {CLEAN_OUTPUT_RULES}
     """
@@ -192,7 +192,7 @@ if st.button("🚀 开始生成初稿", type="primary"):
     【内容要求】
     1. 规划硕士毕业后的路径（应届生视角）。
     2. **必须包含**：具体的公司名字、具体的职位名称。
-    3. 将工作内容和学习方向融合在一段话中。
+    3. 将工作内容和未来继续学习方向融合在一段话中。
     {CLEAN_OUTPUT_RULES}
     """
 
@@ -204,7 +204,7 @@ if st.button("🚀 开始生成初稿", type="primary"):
     - 成绩单: 见附带文件 (PDF或图片)
     【内容要求】
     1. 仔细阅读成绩单文件，筛选出与 {target_school_name} **高度相关**的课程。
-    2. 将课程的关键概念、方法学融合成一段有逻辑的叙述。
+    2. 将课程的关键概念、方法学融合成一段有逻辑的叙述，注意该描述需要符合本科阶段教学内容。
     3. 强调课程间的联系（基础/进阶/交叉），体现学术深度。
     {CLEAN_OUTPUT_RULES}
     """
@@ -324,4 +324,5 @@ if st.session_state.get('generated_sections'):
         mime="text/plain",
         type="primary"
     )
+
 
