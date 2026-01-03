@@ -7,7 +7,7 @@ import io
 # ==========================================
 # 1. 页面基础配置
 # ==========================================
-st.set_page_config(page_title="AI 留学文书深度生成器 (Pro)", page_icon="✍️", layout="wide")
+st.set_page_config(page_title="个人陈述写作辅助工具", page_icon="✍️", layout="wide")
 
 if 'generated_sections' not in st.session_state:
     st.session_state['generated_sections'] = {}
