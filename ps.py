@@ -3,37 +3,55 @@ import google.generativeai as genai
 from PIL import Image
 import docx
 import io
+import os
+import time
+from datetime import datetime
+
+# ==========================================
+# 0. 自动版本号生成逻辑
+# ==========================================
+def get_app_version():
+    try:
+        timestamp = os.path.getmtime(__file__)
+        dt = datetime.fromtimestamp(timestamp)
+        # 格式：v13.2.月日.时分
+        build_ver = dt.strftime('%m%d.%H%M')
+        return f"v13.2.{build_ver}", dt.strftime('%Y-%m-%d %H:%M:%S')
+    except Exception:
+        return "v13.2.Dev", "Unknown"
+
+current_version, last_updated_time = get_app_version()
 
 # ==========================================
 # 1. 页面基础配置
 # ==========================================
-# 在浏览器标签页标题中显示版本
-st.set_page_config(page_title="AI 留学文书深度生成器 v12.0", page_icon="✍️", layout="wide")
+st.set_page_config(page_title=f"留学文书工具 {current_version}", layout="wide")
 
 if 'generated_sections' not in st.session_state:
     st.session_state['generated_sections'] = {}
+if 'translated_sections' not in st.session_state:
+    st.session_state['translated_sections'] = {}
 if 'step' not in st.session_state:
     st.session_state['step'] = 1
 
-# --- 修改点：主界面标题显示版本号 ---
-st.title("✍️ AI 留学文书深度生成器 v12.0")
+st.title(f"留学文书辅助写作工具 {current_version}")
 st.markdown("---")
 
 # ==========================================
-# 2. 系统设置 (内置 Key & 版本信息)
+# 2. 系统设置
 # ==========================================
 with st.sidebar:
-    st.header("⚙️ 系统设置")
+    st.header("系统设置")
     api_key = "AIzaSyDQ51jjPXsbeboTG-qrpgvy-HAtM-NYHpU"
-    st.success("✅ Key 已内置")
+    st.success("Key 已内置")
     
     model_name = st.selectbox("选择模型", ["gemini-3-pro-preview"], index=0)
     
-    # --- 修改点：侧边栏底部显示版本详情 ---
     st.markdown("---")
-    st.markdown("### ℹ️ 关于")
-    st.caption("**Version:** v12.0 (Pro)")
-    st.caption("**Update:** 支持PDF成绩单 / 混合课程输入 / 纯净输出模式")
+    st.markdown("### 关于")
+    st.info(f"**当前版本:** {current_version}")
+    st.caption(f"**最后更新:** {last_updated_time}")
+    st.caption("**Fix:** 修复文本框内容不刷新Bug / 强制状态同步")
 
 # ==========================================
 # 3. 核心函数
@@ -49,9 +67,6 @@ def read_word_file(file):
         return f"Error reading Word file: {e}"
 
 def get_gemini_response(prompt, media_content=None, text_context=None):
-    """
-    media_content: 这是一个列表，可以包含 PIL Image 对象，也可以包含 PDF 的数据字典
-    """
     genai.configure(api_key=api_key)
     model = genai.GenerativeModel(model_name)
     
@@ -61,7 +76,6 @@ def get_gemini_response(prompt, media_content=None, text_context=None):
     if text_context:
         content.append(f"\n【参考文档/背景信息】:\n{text_context}")
     
-    # 处理多媒体输入 (图片 或 PDF)
     if media_content:
         if isinstance(media_content, list):
             content.extend(media_content)
@@ -77,26 +91,24 @@ def get_gemini_response(prompt, media_content=None, text_context=None):
 # ==========================================
 # 4. 界面：信息采集
 # ==========================================
-st.header("1️⃣ 信息采集与素材上传")
+st.header("1. 信息采集与素材上传")
 
 col1, col2 = st.columns(2)
 
 with col1:
-    st.subheader("📂 学生素材")
+    st.subheader("学生素材")
     uploaded_word = st.file_uploader("上传文书信息收集表 (.docx)", type=['docx'])
-    
-    # 支持 PDF 和 图片
     uploaded_transcript = st.file_uploader("上传成绩单 (支持 截图 或 PDF)", type=['png', 'jpg', 'jpeg', 'pdf'])
 
 with col2:
-    st.subheader("🧠 顾问指导 & 目标")
-    counselor_strategy = st.text_area("顾问指导思路 (Direction)", height=100, 
+    st.subheader("顾问指导 & 目标")
+    counselor_strategy = st.text_area("顾问指导思路", height=100, 
                                       placeholder="例如：强调量化分析潜力，弱化GPA...")
     target_school_name = st.text_input("目标学校 & 专业名称", placeholder="例如：UCL - MSc Business Analytics")
     
     st.markdown("**目标专业课程设置 (支持 文本粘贴 或 图片上传):**")
     target_curriculum_text = st.text_area("方式A: 粘贴课程列表文本", height=100, placeholder="Core Modules: ...")
-    uploaded_curriculum_images = st.file_uploader("方式B: 上传课程列表截图 (支持多张)", type=['png', 'jpg', 'jpeg'], accept_multiple_files=True)
+    uploaded_curriculum_images = st.file_uploader("方式B: 上传课程列表截图", type=['png', 'jpg', 'jpeg'], accept_multiple_files=True)
 
 # 读取 Word
 word_content = ""
@@ -107,7 +119,7 @@ if uploaded_word:
 # 5. 界面：模块选择
 # ==========================================
 st.markdown("---")
-st.header("2️⃣ 写作模块选择")
+st.header("2. 写作模块选择")
 
 modules = {
     "Motivation": "申请动机",
@@ -123,30 +135,58 @@ selected_modules = st.multiselect("选择模块：", list(modules.keys()), forma
 # 6. 核心逻辑：生成 Prompt
 # ==========================================
 st.markdown("---")
-st.header("3️⃣ AI 深度写作")
+st.header("3. 一键点击创作")
 
-# 纯净输出规则
 CLEAN_OUTPUT_RULES = """
-【🚨 绝对输出规则 (违反将导致任务失败) 🚨】
-1. **只输出正文内容本身**。
-2. **严禁**包含任何开场白（如 "Here is the draft", "这是一段..."）。
-3. **严禁**包含任何结尾语或 "设计思路"、"逻辑结构" 说明。
-4. **严禁**使用 Markdown 加粗符号（即不要出现 **text**）。
-5. **严禁**使用 Markdown 列表符号（如 - 或 1.）。
-6. **严禁**使用 Markdown 标题符号（如 ###）。
-7. 输出必须是**纯文本**，仅包含必要的标点符号。
-8. 必须写成**一个完整的、连贯的中文自然段**。
+【🚨 绝对输出规则】
+1. 只输出正文内容本身。
+2. 严禁包含开场白、结尾语或结构说明。
+3. 严禁使用 Markdown 格式（如加粗、列表符号、标题符号）。
+4. 输出必须是纯文本。
+5. 必须写成一个完整的、连贯的中文自然段。
 """
 
-if st.button("🚀 开始生成初稿", type="primary"):
-    # 检查必要输入
+TRANSLATION_RULES = """
+【Translation Task】
+Translate the provided Chinese text into a professional English Personal Statement paragraph.
+
+【Strict Constraints & Style Guide】
+1. **NO Adverbs**: Avoid adverbs entirely.
+2. **NO Gerunds as Nouns**: Do not use -ing words as nouns (e.g., avoid "Learning is...").
+3. **Professional Terminology**: Ensure high academic/professional precision.
+4. **Logical Flow**: Ensure smooth transitions and strong coherence.
+5. **Sentence Structure**: Simple but varied. Do NOT repeat the same sentence pattern.
+6. **Paragraphing**: Keep the output as ONE single paragraph (do not split).
+7. **Bolding**: Output the ENTIRE translated text in **Bold** (Markdown).
+8. **Semicolons**: Use semicolons (;) to connect closely related independent clauses instead of periods where appropriate.
+9. **Quotation Marks**: Punctuation must be OUTSIDE quotation marks (e.g., "term",).
+
+【🚫 BANNED WORDS/PHRASES (Do NOT use)】
+- master (in the sense of learning/grasping)
+- my goal is to
+- permit
+- deep comprehension
+- focus
+- look forward to
+- address
+- command
+- drawn to
+- draw
+- demonstrate
+- privilege
+- Any metaphorical words in quotation marks (e.g., "sponge", "bridge")
+
+【Input Text】:
+"""
+
+if st.button("开始生成初稿", type="primary"):
     has_curriculum = target_curriculum_text or uploaded_curriculum_images
     
     if not uploaded_word or not uploaded_transcript or not has_curriculum:
-        st.error("❌ 请确保：文书素材表、成绩单(PDF/图片)、目标课程信息 均已提供。")
+        st.error("请确保：文书素材表、成绩单、目标课程信息 均已提供。")
         st.stop()
     
-    # --- 1. 处理成绩单 (PDF 或 图片) ---
+    # 准备素材
     transcript_content = []
     if uploaded_transcript.type == "application/pdf":
         transcript_content.append({
@@ -156,7 +196,6 @@ if st.button("🚀 开始生成初稿", type="primary"):
     else:
         transcript_content.append(Image.open(uploaded_transcript))
 
-    # --- 2. 处理课程截图 (图片列表) ---
     curriculum_imgs = []
     if uploaded_curriculum_images:
         for img_file in uploaded_curriculum_images:
@@ -166,9 +205,7 @@ if st.button("🚀 开始生成初稿", type="primary"):
     total_steps = len(selected_modules)
     current_step = 0
 
-    # --- 定义 Prompt ---
-    
-    # 1. 动机
+    # 定义 Prompts
     prompt_motivation = f"""
     【任务】撰写 Personal Statement 的 "申请动机" 部分。
     【输入背景】
@@ -178,12 +215,11 @@ if st.button("🚀 开始生成初稿", type="primary"):
     【内容要求】
     1. 提取素材中触发兴趣的经历。
     2. 结合 {target_school_name} 所在领域的研究热点或行业动态。
-    3. 逻辑连接：兴趣 -> 热点 -> 申请必要性，需要提炼出在本科教育基础之上学生还想通过硕士学位探索哪一细分领域。
+    3. 逻辑连接：兴趣 -> 热点 -> 申请必要性，提炼出在本科基础上想进一步探索的细分领域。
     4. 语气简洁凝练，开门见山。
     {CLEAN_OUTPUT_RULES}
     """
 
-    # 2. 职业规划
     prompt_career = f"""
     【任务】撰写 "职业规划" (Career Goals) 部分。
     【输入背景】
@@ -196,41 +232,37 @@ if st.button("🚀 开始生成初稿", type="primary"):
     {CLEAN_OUTPUT_RULES}
     """
 
-    # 3. 本科学习 (视觉/文档 - 成绩单)
     prompt_academic = f"""
     【任务】撰写 "本科学习经历" (Academic Background) 部分。
     【输入背景】
     - 目标专业: {target_school_name}
-    - 成绩单: 见附带文件 (PDF或图片)
+    - 核心依据 (成绩单): 见附带文件 (PDF或图片)
+    - 辅助参考 (学生自述): 见附带文本 (Word内容)
+    
     【内容要求】
-    1. 仔细阅读成绩单文件，筛选出与 {target_school_name} **高度相关**的课程。
-    2. 将课程的关键概念、方法学融合成一段有逻辑的叙述，注意该描述需要符合本科阶段教学内容。
-    3. 强调课程间的联系（基础/进阶/交叉），体现学术深度。
+    1. **以成绩单为核心**：首先从成绩单中筛选出与 {target_school_name} 高度相关的核心课程。
+    2. **融合自述素材**：检查“学生自述”文本中是否有关于这些课程的深入描述（如Project细节、实验过程）。如果有且相关，请融合进去；如果自述内容与目标专业不相关，请忽略。
+    3. 逻辑叙述：将课程的关键概念、方法学融合成一段有逻辑的叙述，描述需符合本科教学实际。
+    4. 强调联系：体现课程间的基础/进阶/交叉关系。
     {CLEAN_OUTPUT_RULES}
     """
 
-    # 4. Why School (混合输入)
-    curriculum_text_prompt = ""
-    if target_curriculum_text:
-        curriculum_text_prompt = f"\n【目标课程文本列表】:\n{target_curriculum_text}\n"
-    
     prompt_whyschool = f"""
     【任务】撰写 "Why School" 部分。
     【输入背景】
     - 目标学校: {target_school_name}
     - 顾问思路: {counselor_strategy}
-    {curriculum_text_prompt}
-    - 课程图片信息: 见附带图片 (如果有)
+    {f'【目标课程文本列表】:{target_curriculum_text}' if target_curriculum_text else ''}
+    - 课程图片信息: 见附带图片
     
     【内容要求】
-    1. **综合分析**：结合提供的文本列表和图片中的课程信息。
-    2. **筛选**：从中挑选出 3-4 门与学生背景或未来规划最相关的特定课程。
-    3. **阐述**：说明这些课程（提及具体课名或核心概念）为何吸引学生，以及能提供什么帮助。
-    4. 语气朴素专业，议论为主，不要夸张。
+    1. 综合分析提供的文本列表和图片中的课程信息。
+    2. 从中挑选 3-4 门与学生背景或规划最相关的特定课程。
+    3. 说明这些课程（提及课名或概念）为何吸引学生及有何帮助。
+    4. 语气朴素专业，议论为主。
     {CLEAN_OUTPUT_RULES}
     """
 
-    # 5. 实习/工作
     prompt_internship = f"""
     【任务】撰写 "实习/工作经历" (Professional Experience) 部分。
     【输入背景】
@@ -255,7 +287,6 @@ if st.button("🚀 开始生成初稿", type="primary"):
         current_step += 1
         st.toast(f"正在撰写: {modules[module]} ...")
         
-        # 决定传入哪组多媒体内容
         current_media = None
         if module == "Academic":
             current_media = transcript_content
@@ -264,65 +295,124 @@ if st.button("🚀 开始生成初稿", type="primary"):
         
         res = get_gemini_response(prompts_map[module], media_content=current_media, text_context=word_content)
         
+        # 1. 更新后端数据
         st.session_state['generated_sections'][module] = res.strip()
+        
+        # 2. 【关键修复】强制更新文本框的 Session State Key
+        # 这样下次渲染 text_area 时，它会被迫显示最新的值
+        if f"text_{module}" in st.session_state:
+            st.session_state[f"text_{module}"] = res.strip()
+        
+        # 3. 清空旧翻译
+        if module in st.session_state['translated_sections']:
+            del st.session_state['translated_sections'][module]
+            
         progress_bar.progress(current_step / total_steps)
 
-    st.success("✅ 初稿生成完毕！")
+    st.success("初稿生成完毕！")
 
 # ==========================================
-# 7. 界面：反馈与修改
+# 7. 界面：反馈、修改与翻译
 # ==========================================
 if st.session_state.get('generated_sections'):
     st.markdown("---")
-    st.header("4️⃣ 审阅与精修")
-    st.info("👇 AI 已按纯净模式输出。如需修改，请在下方输入建议。")
+    st.header("4. 审阅、精修与翻译")
+    st.info("👇 左侧为中文初稿，修改满意后可点击右侧按钮进行翻译。")
 
     display_order = ["Motivation", "Academic", "Internship", "Why_School", "Career_Goal"]
     
     for module in display_order:
         if module in st.session_state['generated_sections']:
             with st.container():
-                st.subheader(f"📄 {modules[module]}")
+                st.subheader(f"{modules[module]}")
                 
-                current_content = st.session_state['generated_sections'][module]
-                st.text_area(f"内容 ({module})", value=current_content, height=200, key=f"text_{module}")
+                c1, c2 = st.columns([1, 1])
                 
-                col_f1, col_f2 = st.columns([3, 1])
-                with col_f1:
-                    feedback = st.text_input(f"修改建议 ({modules[module]}):", key=f"fb_{module}")
-                with col_f2:
-                    if st.button(f"🔄 修改 {module}", key=f"btn_{module}"):
-                        if not feedback:
-                            st.warning("请输入建议")
-                        else:
-                            with st.spinner("正在重写..."):
-                                revise_prompt = f"""
-                                【任务】根据反馈修改段落。
-                                【原段落】{current_content}
-                                【用户反馈】{feedback}
-                                {CLEAN_OUTPUT_RULES}
-                                """
-                                revised_text = get_gemini_response(revise_prompt)
-                                st.session_state['generated_sections'][module] = revised_text.strip()
-                                st.rerun()
+                with c1:
+                    st.markdown("**中文草稿 (可编辑)**")
+                    
+                    # 确保文本框的初始值是最新的
+                    # 如果 key 不在 session_state 中，初始化它
+                    if f"text_{module}" not in st.session_state:
+                        st.session_state[f"text_{module}"] = st.session_state['generated_sections'][module]
+                    
+                    # 渲染文本框，直接绑定到 session_state key
+                    current_content = st.text_area(
+                        f"中文内容 - {module}", 
+                        key=f"text_{module}",
+                        height=250
+                    )
+                    
+                    # 实时同步：如果用户手动编辑了，更新 generated_sections
+                    st.session_state['generated_sections'][module] = current_content
+
+                    # 修改建议区
+                    fb_col1, fb_col2 = st.columns([3, 1])
+                    with fb_col1:
+                        feedback = st.text_input(f"修改建议 ({modules[module]}):", key=f"fb_{module}")
+                    with fb_col2:
+                        if st.button(f"🔄 AI重写", key=f"btn_{module}"):
+                            if not feedback:
+                                st.warning("请输入建议")
+                            else:
+                                with st.spinner("正在重写..."):
+                                    revise_prompt = f"""
+                                    【任务】根据反馈修改段落。
+                                    【原段落】{current_content}
+                                    【用户反馈】{feedback}
+                                    {CLEAN_OUTPUT_RULES}
+                                    """
+                                    revised_text = get_gemini_response(revise_prompt)
+                                    
+                                    # 1. 更新后端数据
+                                    st.session_state['generated_sections'][module] = revised_text.strip()
+                                    
+                                    # 2. 【关键修复】强制更新文本框的 key，确保 UI 刷新
+                                    st.session_state[f"text_{module}"] = revised_text.strip()
+                                    
+                                    # 3. 清空翻译
+                                    if module in st.session_state['translated_sections']:
+                                        del st.session_state['translated_sections'][module]
+                                    
+                                    st.rerun()
+
+                with c2:
+                    st.markdown("**英文翻译 (Translation)**")
+                    
+                    if st.button(f"🇺🇸 翻译为英文", key=f"trans_btn_{module}"):
+                        with st.spinner("Translating with strict rules..."):
+                            # 使用当前文本框里的内容（无论是AI写的还是人改的）
+                            content_to_translate = st.session_state[f"text_{module}"]
+                            
+                            full_trans_prompt = f"{TRANSLATION_RULES}\n{content_to_translate}"
+                            trans_res = get_gemini_response(full_trans_prompt)
+                            st.session_state['translated_sections'][module] = trans_res.strip()
+                    
+                    if module in st.session_state['translated_sections']:
+                        st.markdown(st.session_state['translated_sections'][module])
+                    else:
+                        st.caption("点击上方按钮生成英文翻译")
 
     # ==========================================
     # 8. 导出
     # ==========================================
     st.markdown("---")
-    st.header("5️⃣ 最终导出")
+    st.header("5. 最终导出")
     
     full_text = ""
     for module in display_order:
-        if module in st.session_state['generated_sections']:
+        if module in st.session_state.get('translated_sections', {}):
+            full_text += f"--- {modules[module]} (English) ---\n"
+            clean_en = st.session_state['translated_sections'][module].replace("**", "")
+            full_text += clean_en + "\n\n"
+        elif module in st.session_state['generated_sections']:
+            full_text += f"--- {modules[module]} (中文草稿) ---\n"
             full_text += st.session_state['generated_sections'][module] + "\n\n"
             
     st.download_button(
-        label="📥 下载纯净文书 (.txt)",
+        label="📥 下载文书 (.txt)",
         data=full_text,
-        file_name=f"PS_{target_school_name}.txt",
+        file_name=f"PS_{target_school_name}_{current_version}.txt",
         mime="text/plain",
         type="primary"
     )
-
-
