@@ -16,47 +16,49 @@ def get_app_version():
     try:
         timestamp = os.path.getmtime(__file__)
         dt = datetime.fromtimestamp(timestamp)
-        # 格式：v13.20.月日.时分
+        # 格式：v13.21.月日.时分
         build_ver = dt.strftime('%m%d.%H%M')
-        return f"v13.20.{build_ver}", dt.strftime('%Y-%m-%d %H:%M:%S')
+        return f"v13.21.{build_ver}", dt.strftime('%Y-%m-%d %H:%M:%S')
     except Exception:
-        return "v13.20.Dev", "Unknown"
+        return "v13.21.Dev", "Unknown"
 
 current_version, last_updated_time = get_app_version()
 
 # ==========================================
-# 1. 页面基础配置 & 终极 CSS 对齐
+# 1. 页面基础配置 & 强力 CSS 对齐 (修复版)
 # ==========================================
 st.set_page_config(page_title=f"留学文书工具 {current_version}", layout="wide")
 
-# --- CSS Hack: 强制底部边框对齐 ---
+# --- CSS Hack: 强制三列卡片严格等高 ---
 st.markdown("""
 <style>
-    /* 1. 水平容器：强制子元素高度拉伸 */
+    /* 1. 让最外层的水平容器拉伸子元素 */
     div[data-testid="stHorizontalBlock"] {
         align-items: stretch;
         height: auto;
     }
 
-    /* 2. 列容器：设置为 Flex 布局，并强制高度 100% */
+    /* 2. 让每一列 (Column) 变成 Flex 容器，垂直方向，高度100% */
     div[data-testid="column"] {
         display: flex;
         flex-direction: column;
         height: 100%;
     }
 
-    /* 3. 卡片容器 (带边框的)：强制占满剩余空间，确保高度一致 */
+    /* 3. 核心：强制带边框的容器 (Card) 高度为 100%，并填满剩余空间 */
     div[data-testid="stVerticalBlockBorderWrapper"] {
+        flex: 1 1 auto;      /* Grow, Shrink, Auto basis */
+        height: 100%;        /* 强制占满父容器高度 */
+        display: flex;
+        flex-direction: column;
+        min-height: 450px;   /* 设置一个最小高度基准，防止内容过少时塌陷 */
+    }
+    
+    /* 4. 让卡片内部的内容容器也自适应 */
+    div[data-testid="stVerticalBlockBorderWrapper"] > div {
         flex-grow: 1;
         display: flex;
         flex-direction: column;
-        height: 100%;
-        min-height: 100%; /* 核心：强制最小高度也填满 */
-    }
-    
-    /* 4. 内部内容容器：允许内容自然填充 */
-    div[data-testid="stVerticalBlockBorderWrapper"] > div {
-        flex-grow: 1;
     }
 
     /* 5. 紧凑化 Label 间距 */
@@ -75,12 +77,13 @@ if 'translated_sections' not in st.session_state:
     st.session_state['translated_sections'] = {}
 if 'chat_histories' not in st.session_state:
     st.session_state['chat_histories'] = {} 
+# Daily Vibe 初始化在下方逻辑中处理
 
 st.title(f"留学文书辅助写作工具 {current_version}")
 st.markdown("---")
 
 # ==========================================
-# 2. 核心文案库 (幽默加载 + 情绪价值)
+# 2. 核心文案库
 # ==========================================
 
 # --- A. 幽默加载文案库 ---
@@ -126,21 +129,29 @@ DAILY_VIBES = [
 def get_random_loading_msg():
     return random.choice(FUNNY_LOADING_MESSAGES)
 
-def stream_vibe_text():
-    """生成器函数，用于产生打字机效果"""
-    quote = random.choice(DAILY_VIBES)
-    for word in quote.split(): 
-        yield word + " "
-        time.sleep(0.05) 
-
 # ==========================================
-# 3. 系统设置 (侧边栏 - 含情绪价值模块)
+# 3. 系统设置 (侧边栏 - 含每小时更新的 Vibe)
 # ==========================================
 with st.sidebar:
-    # --- 🌟 情绪价值模块 (Daily Vibe) ---
+    # --- 🌟 情绪价值模块 (Daily Vibe - 1小时更新一次) ---
     st.markdown("### ✨ Daily Vibe")
     with st.container(border=True):
-        st.write_stream(stream_vibe_text)
+        # 1. 初始化
+        if 'daily_vibe' not in st.session_state:
+            st.session_state['daily_vibe'] = {
+                "content": random.choice(DAILY_VIBES), 
+                "time": time.time()
+            }
+        
+        # 2. 检查是否过期 (3600秒 = 1小时)
+        if time.time() - st.session_state['daily_vibe']['time'] > 3600:
+            st.session_state['daily_vibe'] = {
+                "content": random.choice(DAILY_VIBES), 
+                "time": time.time()
+            }
+        
+        # 3. 显示 (使用 info 样式，不使用 stream 以避免每次 rerun 都闪烁)
+        st.info(st.session_state['daily_vibe']['content'])
     
     st.markdown("---")
     
@@ -159,7 +170,7 @@ with st.sidebar:
     st.markdown("### 关于")
     st.info(f"**当前版本:** {current_version}")
     st.caption(f"**最后更新:** {last_updated_time}")
-    st.caption("**Update:** 灵感助手不跳页修复 + 翻译禁词升级")
+    st.caption("**Update:** 顶部底部严格对齐 + 动态翻译按钮")
 
 # ==========================================
 # 4. 核心函数
@@ -264,7 +275,7 @@ if uploaded_material:
         student_background_text = read_pdf_text(uploaded_material)
 
 # ==========================================
-# 6. 界面：写作设定 (新增拼写选项)
+# 6. 界面：写作设定 (拼写偏好)
 # ==========================================
 st.markdown("---")
 st.header("2. 写作设定")
@@ -586,10 +597,15 @@ if st.session_state.get('generated_sections'):
                 with c2:
                     tab_trans, tab_chat = st.tabs(["🇺🇸 英文翻译", "🤖 灵感助手 (Chat)"])
                     
-                    # Tab 1: 翻译
+                    # Tab 1: 翻译 (动态按钮 Label)
                     with tab_trans:
                         st.markdown("**英文翻译结果**")
-                        if st.button(f"🚀 翻译此段", key=f"trans_btn_{module}"):
+                        
+                        # 动态生成按钮文本
+                        flag_icon = "🇬🇧" if "British" in spelling_preference else "🇺🇸"
+                        style_text = "British" if "British" in spelling_preference else "American"
+                        
+                        if st.button(f"{flag_icon} 翻译此段 ({style_text})", key=f"trans_btn_{module}"):
                             if not api_key:
                                 st.error("需要 API Key")
                             else:
@@ -612,33 +628,25 @@ if st.session_state.get('generated_sections'):
                         else:
                             st.info("👈 满意左侧中文稿后，点击上方按钮生成翻译。")
 
-                    # Tab 2: 灵感助手 (Chat) - 重构版 (No Jump)
+                    # Tab 2: 灵感助手 (Chat) - No Jump
                     with tab_chat:
                         st.caption("🤔 遇到卡顿？在这里查资料、问同义词或寻找灵感。")
                         
                         if module not in st.session_state['chat_histories']:
                             st.session_state['chat_histories'][module] = []
                         
-                        # 1. 历史记录容器 (放在表单上方)
                         chat_history_container = st.container(height=250)
                         
-                        # 2. 输入表单 (clear_on_submit=True 自动清空)
                         with st.form(key=f"chat_form_{module}", clear_on_submit=True):
                             user_query = st.text_input(f"向助手提问 ({modules[module]})", key=f"chat_in_{module}")
                             submit_chat = st.form_submit_button("发送")
                         
-                        # 3. 逻辑处理 (在同一个 run 周期内完成，不调用 rerun)
                         if submit_chat and user_query:
                             if not api_key:
                                 st.error("需要 API Key")
                             else:
-                                # 记录用户提问
                                 st.session_state['chat_histories'][module].append({"role": "user", "content": user_query})
-                                
-                                # 获取随机文案
                                 loading_msg = get_random_loading_msg()
-                                
-                                # 调用 API
                                 with st.spinner(loading_msg):
                                     chat_prompt = f"""
                                     你是一个专业的留学文书助手。用户正在撰写 '{modules[module]}' 部分。
@@ -648,7 +656,6 @@ if st.session_state.get('generated_sections'):
                                     ai_reply = get_gemini_response(chat_prompt)
                                     st.session_state['chat_histories'][module].append({"role": "assistant", "content": ai_reply})
 
-                        # 4. 渲染历史记录 (使用更新后的 state)
                         with chat_history_container:
                             for msg in st.session_state['chat_histories'][module]:
                                 with st.chat_message(msg["role"]):
