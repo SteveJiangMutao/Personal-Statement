@@ -14,7 +14,7 @@ if 'generated_sections' not in st.session_state:
 if 'step' not in st.session_state:
     st.session_state['step'] = 1
 
-st.title("✍️ AI 留学文书深度生成器 (纯净输出版)")
+st.title("✍️ AI 留学文书深度生成器 (混合输入版)")
 st.markdown("---")
 
 # ==========================================
@@ -84,9 +84,10 @@ with col2:
                                       placeholder="例如：强调量化分析潜力，弱化GPA...")
     target_school_name = st.text_input("目标学校 & 专业名称", placeholder="例如：UCL - MSc Business Analytics")
     
-    # --- 修改点：改为上传多张截图 ---
-    st.markdown("**目标专业课程设置 (上传官网截图/多张):**")
-    uploaded_curriculum_images = st.file_uploader("上传课程列表截图", type=['png', 'jpg', 'jpeg'], accept_multiple_files=True)
+    # --- 修改点：支持文本 OR 图片 OR 两者皆有 ---
+    st.markdown("**目标专业课程设置 (支持 文本粘贴 或 图片上传):**")
+    target_curriculum_text = st.text_area("方式A: 粘贴课程列表文本", height=100, placeholder="Core Modules: ...")
+    uploaded_curriculum_images = st.file_uploader("方式B: 上传课程列表截图 (支持多张)", type=['png', 'jpg', 'jpeg'], accept_multiple_files=True)
 
 # 读取 Word
 word_content = ""
@@ -103,7 +104,7 @@ modules = {
     "Motivation": "申请动机",
     "Academic": "本科学习经历",
     "Internship": "实习/工作经历",
-    "Why_School": "Why School (基于课程截图)",
+    "Why_School": "Why School (基于课程)",
     "Career_Goal": "职业规划"
 }
 
@@ -115,7 +116,7 @@ selected_modules = st.multiselect("选择模块：", list(modules.keys()), forma
 st.markdown("---")
 st.header("3️⃣ AI 深度写作")
 
-# 定义一个通用的“纯净输出”指令，复用到所有 Prompt 中
+# 纯净输出规则
 CLEAN_OUTPUT_RULES = """
 【🚨 绝对输出规则 (违反将导致任务失败) 🚨】
 1. **只输出正文内容本身**。
@@ -130,13 +131,16 @@ CLEAN_OUTPUT_RULES = """
 
 if st.button("🚀 开始生成初稿", type="primary"):
     # 检查必要输入
-    if not uploaded_word or not uploaded_transcript or not uploaded_curriculum_images:
-        st.error("❌ 请确保：文书素材表、成绩单截图、目标课程截图 均已上传。")
+    # 逻辑：课程设置只要有 文本 或 图片 其中之一即可
+    has_curriculum = target_curriculum_text or uploaded_curriculum_images
+    
+    if not uploaded_word or not uploaded_transcript or not has_curriculum:
+        st.error("❌ 请确保：文书素材表、成绩单截图、目标课程信息 (文本或图片) 均已提供。")
         st.stop()
     
     # 准备图片对象
     transcript_img = Image.open(uploaded_transcript)
-    curriculum_imgs = [Image.open(img) for img in uploaded_curriculum_images]
+    curriculum_imgs = [Image.open(img) for img in uploaded_curriculum_images] if uploaded_curriculum_images else None
     
     progress_bar = st.progress(0)
     total_steps = len(selected_modules)
@@ -185,15 +189,22 @@ if st.button("🚀 开始生成初稿", type="primary"):
     {CLEAN_OUTPUT_RULES}
     """
 
-    # 4. Why School (视觉 - 课程截图)
+    # 4. Why School (混合输入：文本 + 图片)
+    # 动态构建课程信息的提示词
+    curriculum_text_prompt = ""
+    if target_curriculum_text:
+        curriculum_text_prompt = f"\n【目标课程文本列表】:\n{target_curriculum_text}\n"
+    
     prompt_whyschool = f"""
     【任务】撰写 "Why School" 部分。
     【输入背景】
     - 目标学校: {target_school_name}
-    - 课程列表: 见附带的多张图片
     - 顾问思路: {counselor_strategy}
+    {curriculum_text_prompt}
+    - 课程图片信息: 见附带图片 (如果有)
+    
     【内容要求】
-    1. **视觉分析**：仔细阅读所有附带的课程列表截图。
+    1. **综合分析**：结合提供的文本列表和图片中的课程信息。
     2. **筛选**：从中挑选出 3-4 门与学生背景或未来规划最相关的特定课程。
     3. **阐述**：说明这些课程（提及具体课名或核心概念）为何吸引学生，以及能提供什么帮助。
     4. 语气朴素专业，议论为主，不要夸张。
@@ -230,11 +241,11 @@ if st.button("🚀 开始生成初稿", type="primary"):
         if module == "Academic":
             current_images = transcript_img # 传成绩单
         elif module == "Why_School":
-            current_images = curriculum_imgs # 传课程截图列表
+            current_images = curriculum_imgs # 传课程截图列表 (如果有)
         
         res = get_gemini_response(prompts_map[module], images=current_images, text_context=word_content)
         
-        st.session_state['generated_sections'][module] = res.strip() # 去除首尾空格
+        st.session_state['generated_sections'][module] = res.strip()
         progress_bar.progress(current_step / total_steps)
 
     st.success("✅ 初稿生成完毕！")
@@ -285,7 +296,6 @@ if st.session_state.get('generated_sections'):
     full_text = ""
     for module in display_order:
         if module in st.session_state['generated_sections']:
-            # 导出时也不带标题，只带纯文本，或者你可以选择带上简单的标记
             full_text += st.session_state['generated_sections'][module] + "\n\n"
             
     st.download_button(
