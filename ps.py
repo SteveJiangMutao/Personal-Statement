@@ -14,7 +14,7 @@ if 'generated_sections' not in st.session_state:
 if 'step' not in st.session_state:
     st.session_state['step'] = 1
 
-st.title("✍️ AI 留学文书深度生成器 (混合输入版)")
+st.title("✍️ AI 留学文书深度生成器 (全能输入版)")
 st.markdown("---")
 
 # ==========================================
@@ -24,8 +24,8 @@ with st.sidebar:
     st.header("⚙️ 系统设置")
     api_key = "AIzaSyDQ51jjPXsbeboTG-qrpgvy-HAtM-NYHpU"
     st.success("✅ Key 已内置")
-    # 必须使用 Pro 模型以处理多图和长文本
-    model_name = st.selectbox("选择模型", ["gemini-3-pro-preview"], index=0)
+    # 必须使用 Pro 模型以处理 PDF 和多图
+    model_name = st.selectbox("选择模型", ["gemini-1.5-pro", "gemini-3-pro-preview"], index=0)
 
 # ==========================================
 # 3. 核心函数
@@ -40,9 +40,9 @@ def read_word_file(file):
     except Exception as e:
         return f"Error reading Word file: {e}"
 
-def get_gemini_response(prompt, images=None, text_context=None):
+def get_gemini_response(prompt, media_content=None, text_context=None):
     """
-    images: 可以是单个 PIL Image，也可以是 PIL Image 的列表
+    media_content: 这是一个列表，可以包含 PIL Image 对象，也可以包含 PDF 的数据字典
     """
     genai.configure(api_key=api_key)
     model = genai.GenerativeModel(model_name)
@@ -53,12 +53,12 @@ def get_gemini_response(prompt, images=None, text_context=None):
     if text_context:
         content.append(f"\n【参考文档/背景信息】:\n{text_context}")
     
-    # 处理图片输入 (支持单图或多图列表)
-    if images:
-        if isinstance(images, list):
-            content.extend(images)
+    # 处理多媒体输入 (图片 或 PDF)
+    if media_content:
+        if isinstance(media_content, list):
+            content.extend(media_content)
         else:
-            content.append(images)
+            content.append(media_content)
         
     try:
         response = model.generate_content(content)
@@ -76,7 +76,9 @@ col1, col2 = st.columns(2)
 with col1:
     st.subheader("📂 学生素材")
     uploaded_word = st.file_uploader("上传文书信息收集表 (.docx)", type=['docx'])
-    uploaded_transcript = st.file_uploader("上传成绩单截图 (单张)", type=['png', 'jpg', 'jpeg'])
+    
+    # --- 修改点：支持 PDF 和 图片 ---
+    uploaded_transcript = st.file_uploader("上传成绩单 (支持 截图 或 PDF)", type=['png', 'jpg', 'jpeg', 'pdf'])
 
 with col2:
     st.subheader("🧠 顾问指导 & 目标")
@@ -84,7 +86,6 @@ with col2:
                                       placeholder="例如：强调量化分析潜力，弱化GPA...")
     target_school_name = st.text_input("目标学校 & 专业名称", placeholder="例如：UCL - MSc Business Analytics")
     
-    # --- 修改点：支持文本 OR 图片 OR 两者皆有 ---
     st.markdown("**目标专业课程设置 (支持 文本粘贴 或 图片上传):**")
     target_curriculum_text = st.text_area("方式A: 粘贴课程列表文本", height=100, placeholder="Core Modules: ...")
     uploaded_curriculum_images = st.file_uploader("方式B: 上传课程列表截图 (支持多张)", type=['png', 'jpg', 'jpeg'], accept_multiple_files=True)
@@ -131,16 +132,29 @@ CLEAN_OUTPUT_RULES = """
 
 if st.button("🚀 开始生成初稿", type="primary"):
     # 检查必要输入
-    # 逻辑：课程设置只要有 文本 或 图片 其中之一即可
     has_curriculum = target_curriculum_text or uploaded_curriculum_images
     
     if not uploaded_word or not uploaded_transcript or not has_curriculum:
-        st.error("❌ 请确保：文书素材表、成绩单截图、目标课程信息 (文本或图片) 均已提供。")
+        st.error("❌ 请确保：文书素材表、成绩单(PDF/图片)、目标课程信息 均已提供。")
         st.stop()
     
-    # 准备图片对象
-    transcript_img = Image.open(uploaded_transcript)
-    curriculum_imgs = [Image.open(img) for img in uploaded_curriculum_images] if uploaded_curriculum_images else None
+    # --- 1. 处理成绩单 (PDF 或 图片) ---
+    transcript_content = []
+    if uploaded_transcript.type == "application/pdf":
+        # 如果是 PDF，构造 Gemini 专用的数据字典
+        transcript_content.append({
+            "mime_type": "application/pdf",
+            "data": uploaded_transcript.getvalue()
+        })
+    else:
+        # 如果是图片，使用 PIL 打开
+        transcript_content.append(Image.open(uploaded_transcript))
+
+    # --- 2. 处理课程截图 (图片列表) ---
+    curriculum_imgs = []
+    if uploaded_curriculum_images:
+        for img_file in uploaded_curriculum_images:
+            curriculum_imgs.append(Image.open(img_file))
     
     progress_bar = st.progress(0)
     total_steps = len(selected_modules)
@@ -176,21 +190,20 @@ if st.button("🚀 开始生成初稿", type="primary"):
     {CLEAN_OUTPUT_RULES}
     """
 
-    # 3. 本科学习 (视觉 - 成绩单)
+    # 3. 本科学习 (视觉/文档 - 成绩单)
     prompt_academic = f"""
     【任务】撰写 "本科学习经历" (Academic Background) 部分。
     【输入背景】
     - 目标专业: {target_school_name}
-    - 成绩单: 见附带图片
+    - 成绩单: 见附带文件 (PDF或图片)
     【内容要求】
-    1. 仔细阅读成绩单图片，筛选出与 {target_school_name} **高度相关**的课程。
+    1. 仔细阅读成绩单文件，筛选出与 {target_school_name} **高度相关**的课程。
     2. 将课程的关键概念、方法学融合成一段有逻辑的叙述。
     3. 强调课程间的联系（基础/进阶/交叉），体现学术深度。
     {CLEAN_OUTPUT_RULES}
     """
 
-    # 4. Why School (混合输入：文本 + 图片)
-    # 动态构建课程信息的提示词
+    # 4. Why School (混合输入)
     curriculum_text_prompt = ""
     if target_curriculum_text:
         curriculum_text_prompt = f"\n【目标课程文本列表】:\n{target_curriculum_text}\n"
@@ -236,14 +249,14 @@ if st.button("🚀 开始生成初稿", type="primary"):
         current_step += 1
         st.toast(f"正在撰写: {modules[module]} ...")
         
-        # 决定传入哪组图片
-        current_images = None
+        # 决定传入哪组多媒体内容
+        current_media = None
         if module == "Academic":
-            current_images = transcript_img # 传成绩单
+            current_media = transcript_content # 传入处理好的 PDF字典 或 图片对象列表
         elif module == "Why_School":
-            current_images = curriculum_imgs # 传课程截图列表 (如果有)
+            current_media = curriculum_imgs # 传入课程图片列表
         
-        res = get_gemini_response(prompts_map[module], images=current_images, text_context=word_content)
+        res = get_gemini_response(prompts_map[module], media_content=current_media, text_context=word_content)
         
         st.session_state['generated_sections'][module] = res.strip()
         progress_bar.progress(current_step / total_steps)
@@ -305,4 +318,3 @@ if st.session_state.get('generated_sections'):
         mime="text/plain",
         type="primary"
     )
-
