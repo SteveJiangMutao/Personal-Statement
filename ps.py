@@ -15,11 +15,11 @@ def get_app_version():
     try:
         timestamp = os.path.getmtime(__file__)
         dt = datetime.fromtimestamp(timestamp)
-        # 格式：v13.9.月日.时分
+        # 格式：v13.10.月日.时分
         build_ver = dt.strftime('%m%d.%H%M')
-        return f"v13.9.{build_ver}", dt.strftime('%Y-%m-%d %H:%M:%S')
+        return f"v13.10.{build_ver}", dt.strftime('%Y-%m-%d %H:%M:%S')
     except Exception:
-        return "v13.9.Dev", "Unknown"
+        return "v13.10.Dev", "Unknown"
 
 current_version, last_updated_time = get_app_version()
 
@@ -59,7 +59,7 @@ with st.sidebar:
     st.markdown("### 关于")
     st.info(f"**当前版本:** {current_version}")
     st.caption(f"**最后更新:** {last_updated_time}")
-    st.caption("**Update:** 优化分号使用与副词限制")
+    st.caption("**Update:** UI 重构：三栏式信息采集")
 
 # ==========================================
 # 3. 核心函数
@@ -110,28 +110,50 @@ def get_gemini_response(prompt, media_content=None, text_context=None):
         return f"Error: {str(e)}"
 
 # ==========================================
-# 4. 界面：信息采集
+# 4. 界面：信息采集 (UI 重构版)
 # ==========================================
 st.header("1. 信息采集与素材上传")
 
-col1, col2 = st.columns(2)
+# 使用三列布局
+col_student, col_counselor, col_target = st.columns(3)
 
-with col1:
-    st.subheader("学生素材")
-    uploaded_material = st.file_uploader("上传文书素材表 或 简历 (Word/PDF)", type=['docx', 'pdf'])
-    uploaded_transcript = st.file_uploader("上传成绩单 (支持 截图 或 PDF)", type=['png', 'jpg', 'jpeg', 'pdf'])
-
-with col2:
-    st.subheader("顾问指导 & 目标")
-    counselor_strategy = st.text_area("顾问指导思路", height=100, 
-                                      placeholder="例如：强调量化分析潜力，弱化GPA...")
-    target_school_name = st.text_input("目标学校 & 专业名称", placeholder="例如：UCL - MSc Business Analytics")
+# --- 第一栏：学生提供信息 ---
+with col_student:
+    st.markdown("### 🧑‍🎓 学生提供信息")
+    st.caption("上传简历、素材表与成绩单")
     
-    st.markdown("**目标专业课程设置 (支持 文本粘贴 或 图片上传):**")
-    target_curriculum_text = st.text_area("方式A: 粘贴课程列表文本", height=100, placeholder="Core Modules: ...")
-    uploaded_curriculum_images = st.file_uploader("方式B: 上传课程列表截图", type=['png', 'jpg', 'jpeg'], accept_multiple_files=True)
+    uploaded_material = st.file_uploader("📄 文书素材/简历 (Word/PDF)", type=['docx', 'pdf'])
+    uploaded_transcript = st.file_uploader("🎓 成绩单 (截图/PDF)", type=['png', 'jpg', 'jpeg', 'pdf'])
 
-# 读取素材文本
+# --- 第二栏：顾问指导意见 ---
+with col_counselor:
+    st.markdown("### 👨‍🏫 顾问指导意见")
+    st.caption("设定文书的整体策略与调性")
+    
+    counselor_strategy = st.text_area(
+        "💡 写作策略/人设强调", 
+        height=200, 
+        placeholder="例如：\n1. 强调量化背景\n2. 解释GPA劣势\n3. 突出某段实习的领导力..."
+    )
+
+# --- 第三栏：目标专业信息 ---
+with col_target:
+    st.markdown("### 🏫 目标专业信息")
+    st.caption("输入目标学校与课程设置")
+    
+    target_school_name = st.text_input("🏛️ 目标学校 & 专业", placeholder="例如：UCL - MSc Business Analytics")
+    
+    st.markdown("**课程设置 (Curriculum):**")
+    # 使用 Tabs 节省空间
+    tab_text, tab_img = st.tabs(["文本粘贴", "图片上传"])
+    
+    with tab_text:
+        target_curriculum_text = st.text_area("粘贴课程列表", height=100, placeholder="Core Modules: ...")
+    
+    with tab_img:
+        uploaded_curriculum_images = st.file_uploader("上传课程截图", type=['png', 'jpg', 'jpeg'], accept_multiple_files=True)
+
+# 读取素材文本 (逻辑保持不变)
 student_background_text = ""
 if uploaded_material:
     if uploaded_material.name.endswith('.docx'):
@@ -171,7 +193,7 @@ CLEAN_OUTPUT_RULES = """
 5. 必须写成一个完整的、连贯的中文自然段。
 """
 
-# --- 修改点：翻译规则 v13.9 ---
+# --- 翻译规则 v13.9 (保持不变) ---
 TRANSLATION_RULES = """
 【Translation Task】
 Translate the provided Chinese text into a professional, human-sounding Personal Statement paragraph.
