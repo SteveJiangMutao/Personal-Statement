@@ -15,11 +15,11 @@ def get_app_version():
     try:
         timestamp = os.path.getmtime(__file__)
         dt = datetime.fromtimestamp(timestamp)
-        # 格式：v13.6.月日.时分
+        # 格式：v13.7.月日.时分
         build_ver = dt.strftime('%m%d.%H%M')
-        return f"v13.6.{build_ver}", dt.strftime('%Y-%m-%d %H:%M:%S')
+        return f"v13.7.{build_ver}", dt.strftime('%Y-%m-%d %H:%M:%S')
     except Exception:
-        return "v13.6.Dev", "Unknown"
+        return "v13.7.Dev", "Unknown"
 
 current_version, last_updated_time = get_app_version()
 
@@ -30,7 +30,7 @@ st.set_page_config(page_title=f"留学文书工具 {current_version}", layout="w
 
 if 'generated_sections' not in st.session_state:
     st.session_state['generated_sections'] = {}
-if 'motivation_trends' not in st.session_state: # 新增：专门存储动机部分的调研资料
+if 'motivation_trends' not in st.session_state:
     st.session_state['motivation_trends'] = ""
 if 'translated_sections' not in st.session_state:
     st.session_state['translated_sections'] = {}
@@ -59,7 +59,7 @@ with st.sidebar:
     st.markdown("### 关于")
     st.info(f"**当前版本:** {current_version}")
     st.caption(f"**最后更新:** {last_updated_time}")
-    st.caption("**Update:** 动机模块增加【趋势调研与引用源】")
+    st.caption("**Update:** 学术部分增加核心概念与真实细节")
 
 # ==========================================
 # 3. 核心函数
@@ -238,7 +238,6 @@ if st.button("开始生成初稿", type="primary"):
 
     # --- Prompt 定义 ---
 
-    # 修改点：Motivation 专用 Prompt，包含调研要求和分隔符
     prompt_motivation = f"""
     【任务】撰写 Personal Statement 的 "申请动机" 部分。
     
@@ -278,6 +277,7 @@ if st.button("开始生成初稿", type="primary"):
     {CLEAN_OUTPUT_RULES}
     """
 
+    # --- 修改点：学术背景 Prompt 升级 ---
     prompt_academic = f"""
     【任务】撰写 "本科学习经历" (Academic Background) 部分。
     【输入背景】
@@ -285,11 +285,14 @@ if st.button("开始生成初稿", type="primary"):
     - 核心依据 (成绩单): 见附带文件 (PDF或图片)
     - 辅助参考 (学生素材/简历): 见附带文本
     
-    【内容要求】
-    1. **以成绩单为核心**：首先从成绩单中筛选出与 {target_school_name} 高度相关的核心课程。
-    2. **融合素材细节**：检查“学生素材/简历”文本中是否有关于这些课程的深入描述（如Project细节、实验过程）。如果有且相关，请融合进去；如果自述内容与目标专业不相关，请忽略。
-    3. 逻辑叙述：将课程的关键概念、方法学融合成一段有逻辑的叙述，描述需符合本科教学实际。
-    4. 强调联系：体现课程间的基础/进阶/交叉关系。
+    【核心原则：深度 > 数量】
+    不要罗列课程名。只精选 **2-3 门** 与目标专业最强相关的核心课程进行深度描写。
+
+    【内容要求 - 必须包含细节】
+    1. **核心概念植入**：在描述每门课时，必须提及该课程具体的**核心概念、模型、算法或理论名称**（例如：不要只说“学了统计学”，要说“掌握了假设检验(Hypothesis Testing)和多元回归分析(Multiple Regression)”）。
+    2. **学术真实感**：结合学生素材，简述是如何理解或应用这些概念的（例如：通过期末项目、实验报告或特定课题）。
+    3. **逻辑升华**：说明这些具体的知识点如何为你攻读 {target_school_name} 打下了坚实的学术基础。
+    4. **禁止**：禁止写成课程清单（List），必须是连贯的学术反思叙述。
     {CLEAN_OUTPUT_RULES}
     """
 
@@ -341,20 +344,16 @@ if st.button("开始生成初稿", type="primary"):
         
         res = get_gemini_response(prompts_map[module], media_content=current_media, text_context=student_background_text)
         
-        # --- 修改点：特殊处理 Motivation 的输出 ---
         final_text = res.strip()
         
         if module == "Motivation":
-            # 尝试解析分隔符
             try:
                 if "[TRENDS_START]" in res and "[DRAFT_START]" in res:
                     trends_part = res.split("[TRENDS_START]")[1].split("[TRENDS_END]")[0].strip()
                     draft_part = res.split("[DRAFT_START]")[1].split("[DRAFT_END]")[0].strip()
-                    
                     st.session_state['motivation_trends'] = trends_part
                     final_text = draft_part
                 else:
-                    # 容错：如果模型没按格式输出，直接全部显示
                     final_text = res
             except:
                 final_text = res
@@ -386,7 +385,6 @@ if st.session_state.get('generated_sections'):
             with st.container():
                 st.subheader(f"{modules[module]}")
                 
-                # --- 修改点：如果是 Motivation，先显示调研结果 ---
                 if module == "Motivation" and st.session_state.get('motivation_trends'):
                     with st.expander("📚 点击查看：行业趋势调研与参考源 (Reference)", expanded=True):
                         st.info(st.session_state['motivation_trends'])
@@ -419,7 +417,6 @@ if st.session_state.get('generated_sections'):
                                     st.error("需要 API Key")
                                 else:
                                     with st.spinner("正在重写..."):
-                                        # 重写时不需要再调研，只需要重写正文
                                         revise_prompt = f"""
                                         【任务】根据反馈修改段落。
                                         【原段落】{current_content}
