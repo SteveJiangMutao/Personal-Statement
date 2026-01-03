@@ -16,16 +16,16 @@ def get_app_version():
     try:
         timestamp = os.path.getmtime(__file__)
         dt = datetime.fromtimestamp(timestamp)
-        # 格式：v13.21.月日.时分
+        # 格式：v13.22.月日.时分
         build_ver = dt.strftime('%m%d.%H%M')
-        return f"v13.21.{build_ver}", dt.strftime('%Y-%m-%d %H:%M:%S')
+        return f"v13.22.{build_ver}", dt.strftime('%Y-%m-%d %H:%M:%S')
     except Exception:
-        return "v13.21.Dev", "Unknown"
+        return "v13.22.Dev", "Unknown"
 
 current_version, last_updated_time = get_app_version()
 
 # ==========================================
-# 1. 页面基础配置 & 强力 CSS 对齐 (修复版)
+# 1. 页面基础配置 & 强力 CSS 对齐
 # ==========================================
 st.set_page_config(page_title=f"留学文书工具 {current_version}", layout="wide")
 
@@ -51,7 +51,7 @@ st.markdown("""
         height: 100%;        /* 强制占满父容器高度 */
         display: flex;
         flex-direction: column;
-        min-height: 450px;   /* 设置一个最小高度基准，防止内容过少时塌陷 */
+        min-height: 450px;   /* 设置一个最小高度基准 */
     }
     
     /* 4. 让卡片内部的内容容器也自适应 */
@@ -77,7 +77,6 @@ if 'translated_sections' not in st.session_state:
     st.session_state['translated_sections'] = {}
 if 'chat_histories' not in st.session_state:
     st.session_state['chat_histories'] = {} 
-# Daily Vibe 初始化在下方逻辑中处理
 
 st.title(f"留学文书辅助写作工具 {current_version}")
 st.markdown("---")
@@ -136,21 +135,19 @@ with st.sidebar:
     # --- 🌟 情绪价值模块 (Daily Vibe - 1小时更新一次) ---
     st.markdown("### ✨ Daily Vibe")
     with st.container(border=True):
-        # 1. 初始化
         if 'daily_vibe' not in st.session_state:
             st.session_state['daily_vibe'] = {
                 "content": random.choice(DAILY_VIBES), 
                 "time": time.time()
             }
         
-        # 2. 检查是否过期 (3600秒 = 1小时)
+        # 检查是否过期 (3600秒 = 1小时)
         if time.time() - st.session_state['daily_vibe']['time'] > 3600:
             st.session_state['daily_vibe'] = {
                 "content": random.choice(DAILY_VIBES), 
                 "time": time.time()
             }
         
-        # 3. 显示 (使用 info 样式，不使用 stream 以避免每次 rerun 都闪烁)
         st.info(st.session_state['daily_vibe']['content'])
     
     st.markdown("---")
@@ -170,7 +167,7 @@ with st.sidebar:
     st.markdown("### 关于")
     st.info(f"**当前版本:** {current_version}")
     st.caption(f"**最后更新:** {last_updated_time}")
-    st.caption("**Update:** 顶部底部严格对齐 + 动态翻译按钮")
+    st.caption("**Update:** 修复 State 冲突报错")
 
 # ==========================================
 # 4. 核心函数
@@ -315,7 +312,6 @@ CLEAN_OUTPUT_RULES = """
 5. 必须写成一个完整的、连贯的中文自然段。
 """
 
-# --- 核心翻译规则 (含新增禁词与副词禁令) ---
 TRANSLATION_RULES_BASE = """
 【Translation Task】
 Translate the provided Chinese text into a professional, human-sounding Personal Statement paragraph.
@@ -555,8 +551,12 @@ if st.session_state.get('generated_sections'):
                                         {CLEAN_OUTPUT_RULES}
                                         """
                                         revised_text = get_gemini_response(revise_prompt)
-                                        st.session_state[f"text_{module}"] = revised_text.strip()
+                                        
+                                        # --- FIX: 安全更新 State ---
                                         st.session_state['generated_sections'][module] = revised_text.strip()
+                                        if f"text_{module}" in st.session_state:
+                                            del st.session_state[f"text_{module}"] # 删除旧状态
+                                        
                                         if module in st.session_state['translated_sections']:
                                             del st.session_state['translated_sections'][module]
                                         st.rerun()
@@ -587,8 +587,12 @@ if st.session_state.get('generated_sections'):
                                         {CLEAN_OUTPUT_RULES}
                                         """
                                         revised_text = get_gemini_response(partial_revise_prompt)
-                                        st.session_state[f"text_{module}"] = revised_text.strip()
+                                        
+                                        # --- FIX: 安全更新 State ---
                                         st.session_state['generated_sections'][module] = revised_text.strip()
+                                        if f"text_{module}" in st.session_state:
+                                            del st.session_state[f"text_{module}"] # 删除旧状态
+                                            
                                         if module in st.session_state['translated_sections']:
                                             del st.session_state['translated_sections'][module]
                                         st.rerun()
@@ -601,7 +605,6 @@ if st.session_state.get('generated_sections'):
                     with tab_trans:
                         st.markdown("**英文翻译结果**")
                         
-                        # 动态生成按钮文本
                         flag_icon = "🇬🇧" if "British" in spelling_preference else "🇺🇸"
                         style_text = "British" if "British" in spelling_preference else "American"
                         
@@ -610,7 +613,6 @@ if st.session_state.get('generated_sections'):
                                 st.error("需要 API Key")
                             else:
                                 with st.spinner("Translating..."):
-                                    # 动态注入拼写规则
                                     spelling_instruction = ""
                                     if "British" in spelling_preference:
                                         spelling_instruction = "\n【SPELLING RULE】: STRICTLY use British English spelling (e.g., colour, analyse, programme, centre, organisation)."
