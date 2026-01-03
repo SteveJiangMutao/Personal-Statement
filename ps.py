@@ -16,47 +16,50 @@ def get_app_version():
     try:
         timestamp = os.path.getmtime(__file__)
         dt = datetime.fromtimestamp(timestamp)
-        # 格式：v13.16.月日.时分
+        # 格式：v13.19.月日.时分
         build_ver = dt.strftime('%m%d.%H%M')
-        return f"v13.16.{build_ver}", dt.strftime('%Y-%m-%d %H:%M:%S')
+        return f"v13.19.{build_ver}", dt.strftime('%Y-%m-%d %H:%M:%S')
     except Exception:
-        return "v13.16.Dev", "Unknown"
+        return "v13.19.Dev", "Unknown"
 
 current_version, last_updated_time = get_app_version()
 
 # ==========================================
-# 1. 页面基础配置 & 强力 CSS 对齐
+# 1. 页面基础配置 & 终极 CSS 对齐
 # ==========================================
 st.set_page_config(page_title=f"留学文书工具 {current_version}", layout="wide")
 
-# --- CSS Hack: 强制三列卡片等高 (核心修改) ---
+# --- CSS Hack: 强制底部边框对齐 ---
 st.markdown("""
 <style>
-    /* 1. 找到包含这三列的水平容器，强制子元素拉伸以适应高度 */
+    /* 1. 水平容器：强制子元素高度拉伸 */
     div[data-testid="stHorizontalBlock"] {
         align-items: stretch;
+        height: auto;
     }
 
-    /* 2. 让每一列 (Column) 变成 Flex 容器，方向垂直 */
+    /* 2. 列容器：设置为 Flex 布局，并强制高度 100% */
     div[data-testid="column"] {
         display: flex;
         flex-direction: column;
+        height: 100%;
     }
 
-    /* 3. 核心：让带边框的卡片 (Border Wrapper) 自动填充剩余空间，且高度设为 100% */
+    /* 3. 卡片容器 (带边框的)：强制占满剩余空间，确保高度一致 */
     div[data-testid="stVerticalBlockBorderWrapper"] {
-        flex: 1;
-        height: 100%;
+        flex-grow: 1;
         display: flex;
         flex-direction: column;
+        height: 100%;
+        min-height: 100%; /* 核心：强制最小高度也填满 */
     }
     
-    /* 4. 微调内部间距，防止内容贴边 */
+    /* 4. 内部内容容器：允许内容自然填充 */
     div[data-testid="stVerticalBlockBorderWrapper"] > div {
         flex-grow: 1;
     }
 
-    /* 5. 调整 Label 边距，使 UI 更紧凑 */
+    /* 5. 紧凑化 Label 间距 */
     .stMarkdown p {
         margin-bottom: 0px;
     }
@@ -77,31 +80,10 @@ st.title(f"留学文书辅助写作工具 {current_version}")
 st.markdown("---")
 
 # ==========================================
-# 2. 系统设置
-# ==========================================
-with st.sidebar:
-    st.header("系统设置")
-    
-    api_key = st.text_input("🔑 请输入 Google API Key", type="password", help="请在 Google AI Studio 申请 Key")
-    
-    if not api_key:
-        st.warning("⚠️ 请输入 Key")
-    else:
-        st.success("✅ Key 已就绪")
-    
-    model_name = st.selectbox("选择模型", ["gemini-3-pro-preview"], index=0)
-    
-    st.markdown("---")
-    st.markdown("### 关于")
-    st.info(f"**当前版本:** {current_version}")
-    st.caption(f"**最后更新:** {last_updated_time}")
-    st.caption("**Update:** CSS 强制卡片高度严格一致")
-
-# ==========================================
-# 3. 核心函数与文案库
+# 2. 核心文案库 (幽默加载 + 情绪价值)
 # ==========================================
 
-# --- 幽默加载文案库 ---
+# --- A. 幽默加载文案库 ---
 FUNNY_LOADING_MESSAGES = [
     "☕️ 正在煮咖啡，顺便思考一下人生...",
     "🧠 正在和 Google 总部的服务器进行脑电波对接...",
@@ -125,9 +107,63 @@ FUNNY_LOADING_MESSAGES = [
     "🎲 正在掷骰子决定用哪个词（开玩笑的）..."
 ]
 
+# --- B. 情绪价值文案库 (Daily Vibe) ---
+DAILY_VIBES = [
+    "🌟 Your story matters. \n你的故事值得被世界听见。",
+    "☕️ Coffee in hand, confidence in mind. \n手中有咖啡，心中有梦想。",
+    "🚀 One step closer to your dream school. \n每一个单词，都是通往梦校的阶梯。",
+    "🌈 Trust the process. \n相信过程，结果自会发生。",
+    "✨ Small steps, big dreams. \n今天的努力，是未来的伏笔。",
+    "🎓 You are capable of amazing things. \n你比想象中更强大。",
+    "💡 Shine bright. \n去发光吧，不仅是为了被看见。",
+    "🛤️ The journey is the reward. \n申请季本身就是一场蜕变。",
+    "💪 Keep going, you got this. \n坚持住，Offer 正在路上。",
+    "🌍 The world is waiting for you. \n世界很大，等你探索。",
+    "✒️ Write your own future. \n提笔，即是未来。",
+    "🦁 Be bold, be you. \n勇敢做自己，这最动人。"
+]
+
 def get_random_loading_msg():
     return random.choice(FUNNY_LOADING_MESSAGES)
 
+def stream_vibe_text():
+    """生成器函数，用于产生打字机效果"""
+    quote = random.choice(DAILY_VIBES)
+    for word in quote.split(): 
+        yield word + " "
+        time.sleep(0.05) # 控制打字速度
+
+# ==========================================
+# 3. 系统设置 (侧边栏 - 含情绪价值模块)
+# ==========================================
+with st.sidebar:
+    # --- 🌟 情绪价值模块 (Daily Vibe) ---
+    st.markdown("### ✨ Daily Vibe")
+    with st.container(border=True):
+        st.write_stream(stream_vibe_text)
+    
+    st.markdown("---")
+    
+    st.header("系统设置")
+    
+    api_key = st.text_input("🔑 请输入 Google API Key", type="password", help="请在 Google AI Studio 申请 Key")
+    
+    if not api_key:
+        st.warning("⚠️ 请输入 Key")
+    else:
+        st.success("✅ Key 已就绪")
+    
+    model_name = st.selectbox("选择模型", ["gemini-3-pro-preview"], index=0)
+    
+    st.markdown("---")
+    st.markdown("### 关于")
+    st.info(f"**当前版本:** {current_version}")
+    st.caption(f"**最后更新:** {last_updated_time}")
+    st.caption("**Update:** 新增英式/美式拼写切换功能")
+
+# ==========================================
+# 4. 核心函数
+# ==========================================
 def read_word_file(file):
     try:
         doc = docx.Document(file)
@@ -174,11 +210,10 @@ def get_gemini_response(prompt, media_content=None, text_context=None):
         return f"Error: {str(e)}"
 
 # ==========================================
-# 4. 界面：信息采集 (UI 优化版 - 强制等高)
+# 5. 界面：信息采集 (UI 终极对齐版)
 # ==========================================
 st.header("1. 信息采集与素材上传")
 
-# 使用 columns 布局
 col_student, col_counselor, col_target = st.columns(3)
 
 # --- 第一栏：学生提供信息 ---
@@ -196,7 +231,6 @@ with col_counselor:
         st.markdown("### 顾问指导意见")
         st.caption("设定文书的整体策略与调性")
         
-        # 调整高度以适配视觉
         counselor_strategy = st.text_area(
             "💡 写作策略/人设强调", 
             height=280, 
@@ -211,13 +245,11 @@ with col_target:
         
         target_school_name = st.text_input("🏛️ 目标学校 & 专业", placeholder="例如：UCL - MSc Business Analytics")
         
-        # --- UI 调整：字体与上方 Input Label 保持一致，并添加图标 ---
         st.markdown("**📖 课程设置 (Curriculum)**") 
         
         tab_text, tab_img = st.tabs(["文本粘贴", "图片上传"])
         
         with tab_text:
-            # 调整高度，使其撑起卡片
             target_curriculum_text = st.text_area("粘贴课程列表", height=140, placeholder="Core Modules: ...", label_visibility="collapsed")
         
         with tab_img:
@@ -232,10 +264,10 @@ if uploaded_material:
         student_background_text = read_pdf_text(uploaded_material)
 
 # ==========================================
-# 5. 界面：模块选择
+# 6. 界面：写作设定 (新增拼写选项)
 # ==========================================
 st.markdown("---")
-st.header("2. 写作模块选择")
+st.header("2. 写作设定") # 已重命名
 
 modules = {
     "Motivation": "申请动机",
@@ -245,10 +277,22 @@ modules = {
     "Career_Goal": "职业规划"
 }
 
-selected_modules = st.multiselect("选择模块：", list(modules.keys()), format_func=lambda x: modules[x], default=list(modules.keys()))
+# 使用列布局来放置 模块选择 和 拼写选择
+col_modules, col_style = st.columns([3, 1])
+
+with col_modules:
+    selected_modules = st.multiselect("选择模块：", list(modules.keys()), format_func=lambda x: modules[x], default=list(modules.keys()))
+
+with col_style:
+    # 新增：拼写风格选择
+    spelling_preference = st.radio(
+        "🔤 拼写偏好 (Spelling)",
+        ["🇬🇧 英式 (British)", "🇺🇸 美式 (American)"],
+        help="翻译时将严格遵循所选的拼写习惯 (如 colour vs color)"
+    )
 
 # ==========================================
-# 6. 核心逻辑：生成 Prompt
+# 7. 核心逻辑：生成 Prompt
 # ==========================================
 st.markdown("---")
 st.header("3. 一键点击创作")
@@ -262,7 +306,8 @@ CLEAN_OUTPUT_RULES = """
 5. 必须写成一个完整的、连贯的中文自然段。
 """
 
-TRANSLATION_RULES = """
+# 注意：这里只定义基础规则，拼写规则会在点击翻译按钮时动态注入
+TRANSLATION_RULES_BASE = """
 【Translation Task】
 Translate the provided Chinese text into a professional, human-sounding Personal Statement paragraph.
 
@@ -293,8 +338,6 @@ Translate the provided Chinese text into a professional, human-sounding Personal
 1. Output as ONE single paragraph.
 2. Output the ENTIRE text in **Bold**.
 3. No Markdown headers.
-
-【Input Text】:
 """
 
 if st.button("开始生成初稿", type="primary"):
@@ -452,7 +495,7 @@ if st.button("开始生成初稿", type="primary"):
     st.success("初稿生成完毕！")
 
 # ==========================================
-# 7. 界面：反馈、修改与翻译 (交互升级 + 灵感助手)
+# 8. 界面：反馈、修改与翻译 (交互升级 + 灵感助手)
 # ==========================================
 if st.session_state.get('generated_sections'):
     st.markdown("---")
@@ -554,8 +597,18 @@ if st.session_state.get('generated_sections'):
                                 st.error("需要 API Key")
                             else:
                                 with st.spinner("Translating..."):
+                                    # --- 动态注入拼写规则 ---
+                                    spelling_instruction = ""
+                                    if "British" in spelling_preference:
+                                        spelling_instruction = "\n【SPELLING RULE】: STRICTLY use British English spelling (e.g., colour, analyse, programme, centre, organisation)."
+                                    else:
+                                        spelling_instruction = "\n【SPELLING RULE】: STRICTLY use American English spelling (e.g., color, analyze, program, center, organization)."
+                                    
                                     content_to_translate = st.session_state[f"text_{module}"]
-                                    full_trans_prompt = f"{TRANSLATION_RULES}\n{content_to_translate}"
+                                    
+                                    # 组合完整 Prompt
+                                    full_trans_prompt = f"{TRANSLATION_RULES_BASE}\n{spelling_instruction}\n【Input Text】:\n{content_to_translate}"
+                                    
                                     trans_res = get_gemini_response(full_trans_prompt)
                                     st.session_state['translated_sections'][module] = trans_res.strip()
                         
@@ -604,7 +657,7 @@ if st.session_state.get('generated_sections'):
                                     st.rerun()
 
     # ==========================================
-    # 8. 导出
+    # 9. 导出
     # ==========================================
     st.markdown("---")
     st.header("5. 最终导出")
