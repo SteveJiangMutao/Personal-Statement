@@ -2,6 +2,7 @@ import streamlit as st
 import google.generativeai as genai
 from PIL import Image
 import docx
+import PyPDF2  # 需要 pip install PyPDF2
 import io
 import os
 import time
@@ -14,11 +15,11 @@ def get_app_version():
     try:
         timestamp = os.path.getmtime(__file__)
         dt = datetime.fromtimestamp(timestamp)
-        # 格式：v13.3.月日.时分
+        # 格式：v13.4.月日.时分
         build_ver = dt.strftime('%m%d.%H%M')
-        return f"v13.3.{build_ver}", dt.strftime('%Y-%m-%d %H:%M:%S')
+        return f"v13.4.{build_ver}", dt.strftime('%Y-%m-%d %H:%M:%S')
     except Exception:
-        return "v13.3.Dev", "Unknown"
+        return "v13.4.Dev", "Unknown"
 
 current_version, last_updated_time = get_app_version()
 
@@ -38,16 +39,15 @@ st.title(f"留学文书辅助写作工具 {current_version}")
 st.markdown("---")
 
 # ==========================================
-# 2. 系统设置 (修改点：改为手动输入 Key)
+# 2. 系统设置
 # ==========================================
 with st.sidebar:
     st.header("系统设置")
     
-    # --- 安全修复：输入框替代硬编码 ---
-    api_key = st.text_input("🔑 请输入 Google API Key", type="password", help="原 Key 已失效，请在 Google AI Studio 申请新 Key")
+    api_key = st.text_input("🔑 请输入 Google API Key", type="password", help="请在 Google AI Studio 申请 Key")
     
     if not api_key:
-        st.warning("⚠️ 请先输入 API Key 才能开始")
+        st.warning("⚠️ 请输入 Key")
     else:
         st.success("✅ Key 已就绪")
     
@@ -57,10 +57,10 @@ with st.sidebar:
     st.markdown("### 关于")
     st.info(f"**当前版本:** {current_version}")
     st.caption(f"**最后更新:** {last_updated_time}")
-    st.caption("**Fix:** 修复 API Key 泄露问题 / 增加 Key 输入框")
+    st.caption("**Update:** 支持 PDF 简历/素材上传")
 
 # ==========================================
-# 3. 核心函数
+# 3. 核心函数 (新增 PDF 读取)
 # ==========================================
 def read_word_file(file):
     try:
@@ -71,6 +71,16 @@ def read_word_file(file):
         return '\n'.join(full_text)
     except Exception as e:
         return f"Error reading Word file: {e}"
+
+def read_pdf_text(file):
+    try:
+        pdf_reader = PyPDF2.PdfReader(file)
+        text = ""
+        for page in pdf_reader.pages:
+            text += page.extract_text() + "\n"
+        return text
+    except Exception as e:
+        return f"Error reading PDF file: {e}"
 
 def get_gemini_response(prompt, media_content=None, text_context=None):
     if not api_key:
@@ -83,7 +93,7 @@ def get_gemini_response(prompt, media_content=None, text_context=None):
     content.append(prompt)
     
     if text_context:
-        content.append(f"\n【参考文档/背景信息】:\n{text_context}")
+        content.append(f"\n【参考文档/背景信息 (简历或素材表)】:\n{text_context}")
     
     if media_content:
         if isinstance(media_content, list):
@@ -106,7 +116,9 @@ col1, col2 = st.columns(2)
 
 with col1:
     st.subheader("学生素材")
-    uploaded_word = st.file_uploader("上传文书信息收集表 (.docx)", type=['docx'])
+    # --- 修改点：支持 Word 或 PDF ---
+    uploaded_material = st.file_uploader("上传文书素材表 或 简历 (Word/PDF)", type=['docx', 'pdf'])
+    
     uploaded_transcript = st.file_uploader("上传成绩单 (支持 截图 或 PDF)", type=['png', 'jpg', 'jpeg', 'pdf'])
 
 with col2:
@@ -119,10 +131,13 @@ with col2:
     target_curriculum_text = st.text_area("方式A: 粘贴课程列表文本", height=100, placeholder="Core Modules: ...")
     uploaded_curriculum_images = st.file_uploader("方式B: 上传课程列表截图", type=['png', 'jpg', 'jpeg'], accept_multiple_files=True)
 
-# 读取 Word
-word_content = ""
-if uploaded_word:
-    word_content = read_word_file(uploaded_word)
+# --- 逻辑处理：读取素材文本 (Word 或 PDF) ---
+student_background_text = ""
+if uploaded_material:
+    if uploaded_material.name.endswith('.docx'):
+        student_background_text = read_word_file(uploaded_material)
+    elif uploaded_material.name.endswith('.pdf'):
+        student_background_text = read_pdf_text(uploaded_material)
 
 # ==========================================
 # 5. 界面：模块选择
@@ -195,11 +210,11 @@ if st.button("开始生成初稿", type="primary"):
 
     has_curriculum = target_curriculum_text or uploaded_curriculum_images
     
-    if not uploaded_word or not uploaded_transcript or not has_curriculum:
-        st.error("请确保：文书素材表、成绩单、目标课程信息 均已提供。")
+    if not uploaded_material or not uploaded_transcript or not has_curriculum:
+        st.error("请确保：文书素材/简历、成绩单、目标课程信息 均已提供。")
         st.stop()
     
-    # 准备素材
+    # 准备成绩单
     transcript_content = []
     if uploaded_transcript.type == "application/pdf":
         transcript_content.append({
@@ -209,6 +224,7 @@ if st.button("开始生成初稿", type="primary"):
     else:
         transcript_content.append(Image.open(uploaded_transcript))
 
+    # 准备课程图片
     curriculum_imgs = []
     if uploaded_curriculum_images:
         for img_file in uploaded_curriculum_images:
@@ -250,11 +266,11 @@ if st.button("开始生成初稿", type="primary"):
     【输入背景】
     - 目标专业: {target_school_name}
     - 核心依据 (成绩单): 见附带文件 (PDF或图片)
-    - 辅助参考 (学生自述): 见附带文本 (Word内容)
+    - 辅助参考 (学生素材/简历): 见附带文本
     
     【内容要求】
     1. **以成绩单为核心**：首先从成绩单中筛选出与 {target_school_name} 高度相关的核心课程。
-    2. **融合自述素材**：检查“学生自述”文本中是否有关于这些课程的深入描述（如Project细节、实验过程）。如果有且相关，请融合进去；如果自述内容与目标专业不相关，请忽略。
+    2. **融合素材细节**：检查“学生素材/简历”文本中是否有关于这些课程的深入描述（如Project细节、实验过程）。如果有且相关，请融合进去；如果自述内容与目标专业不相关，请忽略。
     3. 逻辑叙述：将课程的关键概念、方法学融合成一段有逻辑的叙述，描述需符合本科教学实际。
     4. 强调联系：体现课程间的基础/进阶/交叉关系。
     {CLEAN_OUTPUT_RULES}
@@ -306,16 +322,14 @@ if st.button("开始生成初稿", type="primary"):
         elif module == "Why_School":
             current_media = curriculum_imgs
         
-        res = get_gemini_response(prompts_map[module], media_content=current_media, text_context=word_content)
+        # 传入 student_background_text
+        res = get_gemini_response(prompts_map[module], media_content=current_media, text_context=student_background_text)
         
-        # 1. 更新后端数据
         st.session_state['generated_sections'][module] = res.strip()
         
-        # 2. 强制更新文本框的 Session State Key
         if f"text_{module}" in st.session_state:
             st.session_state[f"text_{module}"] = res.strip()
         
-        # 3. 清空旧翻译
         if module in st.session_state['translated_sections']:
             del st.session_state['translated_sections'][module]
             
