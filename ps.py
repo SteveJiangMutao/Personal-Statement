@@ -2,7 +2,7 @@ import streamlit as st
 import google.generativeai as genai
 from PIL import Image
 import docx
-import PyPDF2  # 需要 pip install PyPDF2
+import PyPDF2
 import io
 import os
 import time
@@ -15,11 +15,11 @@ def get_app_version():
     try:
         timestamp = os.path.getmtime(__file__)
         dt = datetime.fromtimestamp(timestamp)
-        # 格式：v13.4.月日.时分
+        # 格式：v13.6.月日.时分
         build_ver = dt.strftime('%m%d.%H%M')
-        return f"v13.4.{build_ver}", dt.strftime('%Y-%m-%d %H:%M:%S')
+        return f"v13.6.{build_ver}", dt.strftime('%Y-%m-%d %H:%M:%S')
     except Exception:
-        return "v13.4.Dev", "Unknown"
+        return "v13.6.Dev", "Unknown"
 
 current_version, last_updated_time = get_app_version()
 
@@ -30,6 +30,8 @@ st.set_page_config(page_title=f"留学文书工具 {current_version}", layout="w
 
 if 'generated_sections' not in st.session_state:
     st.session_state['generated_sections'] = {}
+if 'motivation_trends' not in st.session_state: # 新增：专门存储动机部分的调研资料
+    st.session_state['motivation_trends'] = ""
 if 'translated_sections' not in st.session_state:
     st.session_state['translated_sections'] = {}
 if 'step' not in st.session_state:
@@ -57,10 +59,10 @@ with st.sidebar:
     st.markdown("### 关于")
     st.info(f"**当前版本:** {current_version}")
     st.caption(f"**最后更新:** {last_updated_time}")
-    st.caption("**Update:** 支持 PDF 简历/素材上传")
+    st.caption("**Update:** 动机模块增加【趋势调研与引用源】")
 
 # ==========================================
-# 3. 核心函数 (新增 PDF 读取)
+# 3. 核心函数
 # ==========================================
 def read_word_file(file):
     try:
@@ -116,9 +118,7 @@ col1, col2 = st.columns(2)
 
 with col1:
     st.subheader("学生素材")
-    # --- 修改点：支持 Word 或 PDF ---
     uploaded_material = st.file_uploader("上传文书素材表 或 简历 (Word/PDF)", type=['docx', 'pdf'])
-    
     uploaded_transcript = st.file_uploader("上传成绩单 (支持 截图 或 PDF)", type=['png', 'jpg', 'jpeg', 'pdf'])
 
 with col2:
@@ -131,7 +131,7 @@ with col2:
     target_curriculum_text = st.text_area("方式A: 粘贴课程列表文本", height=100, placeholder="Core Modules: ...")
     uploaded_curriculum_images = st.file_uploader("方式B: 上传课程列表截图", type=['png', 'jpg', 'jpeg'], accept_multiple_files=True)
 
-# --- 逻辑处理：读取素材文本 (Word 或 PDF) ---
+# 读取素材文本
 student_background_text = ""
 if uploaded_material:
     if uploaded_material.name.endswith('.docx'):
@@ -161,6 +161,7 @@ selected_modules = st.multiselect("选择模块：", list(modules.keys()), forma
 st.markdown("---")
 st.header("3. 一键点击创作")
 
+# 通用规则
 CLEAN_OUTPUT_RULES = """
 【🚨 绝对输出规则】
 1. 只输出正文内容本身。
@@ -170,20 +171,21 @@ CLEAN_OUTPUT_RULES = """
 5. 必须写成一个完整的、连贯的中文自然段。
 """
 
+# 翻译规则
 TRANSLATION_RULES = """
 【Translation Task】
 Translate the provided Chinese text into a professional English Personal Statement paragraph.
 
 【Strict Constraints & Style Guide】
-1. **NO Adverbs**: Avoid adverbs entirely.
-2. **NO Gerunds as Nouns**: Do not use -ing words as nouns (e.g., avoid "Learning is...").
-3. **Professional Terminology**: Ensure high academic/professional precision.
-4. **Logical Flow**: Ensure smooth transitions and strong coherence.
-5. **Sentence Structure**: Simple but varied. Do NOT repeat the same sentence pattern.
-6. **Paragraphing**: Keep the output as ONE single paragraph (do not split).
+1. **Short, Simple Sentences**: STRICTLY avoid long, convoluted sentences. Break complex ideas into shorter, punchier sentences (Subject-Verb-Object structure).
+2. **Logical Linking**: To prevent the short sentences from sounding "choppy" or robotic, you MUST use precise logical connectors (e.g., "Therefore," "Consequently," "However," "Subsequently," "Thus," "In turn") to bridge them smoothly.
+3. **No Descriptive Adverbs**: Do not use adverbs that modify verbs/adjectives (e.g., "deeply," "successfully," "greatly"). *Transitional adverbs (like 'However') are allowed.*
+4. **NO Gerunds as Nouns**: Do not use -ing words as nouns (e.g., avoid "Learning is...").
+5. **Professional Terminology**: Ensure high academic/professional precision.
+6. **Paragraphing**: Keep the output as ONE single paragraph.
 7. **Bolding**: Output the ENTIRE translated text in **Bold** (Markdown).
-8. **Semicolons**: Use semicolons (;) to connect closely related independent clauses instead of periods where appropriate.
-9. **Quotation Marks**: Punctuation must be OUTSIDE quotation marks (e.g., "term",).
+8. **Semicolons**: Use semicolons (;) occasionally to link closely related independent clauses.
+9. **Quotation Marks**: Punctuation must be OUTSIDE quotation marks.
 
 【🚫 BANNED WORDS/PHRASES (Do NOT use)】
 - master (in the sense of learning/grasping)
@@ -198,8 +200,8 @@ Translate the provided Chinese text into a professional English Personal Stateme
 - draw
 - demonstrate
 - privilege
-- tenure
-- Any metaphorical words in quotation marks (e.g., "sponge", "bridge")
+- "not only... but also" (avoid this structure as it creates long sentences)
+- Any metaphorical words in quotation marks
 
 【Input Text】:
 """
@@ -215,7 +217,7 @@ if st.button("开始生成初稿", type="primary"):
         st.error("请确保：文书素材/简历、成绩单、目标课程信息 均已提供。")
         st.stop()
     
-    # 准备成绩单
+    # 准备媒体
     transcript_content = []
     if uploaded_transcript.type == "application/pdf":
         transcript_content.append({
@@ -225,7 +227,6 @@ if st.button("开始生成初稿", type="primary"):
     else:
         transcript_content.append(Image.open(uploaded_transcript))
 
-    # 准备课程图片
     curriculum_imgs = []
     if uploaded_curriculum_images:
         for img_file in uploaded_curriculum_images:
@@ -235,19 +236,34 @@ if st.button("开始生成初稿", type="primary"):
     total_steps = len(selected_modules)
     current_step = 0
 
-    # 定义 Prompts
+    # --- Prompt 定义 ---
+
+    # 修改点：Motivation 专用 Prompt，包含调研要求和分隔符
     prompt_motivation = f"""
     【任务】撰写 Personal Statement 的 "申请动机" 部分。
-    【输入背景】
-    - 顾问思路: {counselor_strategy}
-    - 目标专业: {target_school_name}
-    - 学生素材: 见附带文本
-    【内容要求】
-    1. 提取素材中触发兴趣的经历。
-    2. 结合 {target_school_name} 所在领域的研究热点或行业动态。
-    3. 逻辑连接：兴趣 -> 热点 -> 申请必要性，提炼出在本科基础上想进一步探索的细分领域。
-    4. 语气简洁凝练，开门见山。
-    {CLEAN_OUTPUT_RULES}
+    
+    【步骤 1：深度调研】
+    请先分析 {target_school_name} 所在领域的最新行业热点或学术趋势（列出 2-3 个）。
+    **必须提供具体信息源**：
+    - 具体的论文标题 (Title & Year)
+    - 知名咨询机构报告名称 (如 McKinsey, Deloitte, Gartner)
+    - 权威科技/商业新闻源 (如 TechCrunch, Bloomberg, Nature)
+    - 简述该趋势与学生背景的关联。
+
+    【步骤 2：撰写正文】
+    基于上述趋势和学生素材，撰写一段中文申请动机。
+    逻辑：学生过往经历 -> 观察到的行业痛点/趋势 -> 产生深造需求。
+
+    【🚨 严格输出格式】
+    请严格按照下方分隔符输出，不要包含其他内容：
+
+    [TRENDS_START]
+    (在此处列出调研的趋势和具体来源链接/标题)
+    [TRENDS_END]
+
+    [DRAFT_START]
+    (在此处撰写正文段落，纯文本，无Markdown)
+    [DRAFT_END]
     """
 
     prompt_career = f"""
@@ -323,13 +339,30 @@ if st.button("开始生成初稿", type="primary"):
         elif module == "Why_School":
             current_media = curriculum_imgs
         
-        # 传入 student_background_text
         res = get_gemini_response(prompts_map[module], media_content=current_media, text_context=student_background_text)
         
-        st.session_state['generated_sections'][module] = res.strip()
+        # --- 修改点：特殊处理 Motivation 的输出 ---
+        final_text = res.strip()
+        
+        if module == "Motivation":
+            # 尝试解析分隔符
+            try:
+                if "[TRENDS_START]" in res and "[DRAFT_START]" in res:
+                    trends_part = res.split("[TRENDS_START]")[1].split("[TRENDS_END]")[0].strip()
+                    draft_part = res.split("[DRAFT_START]")[1].split("[DRAFT_END]")[0].strip()
+                    
+                    st.session_state['motivation_trends'] = trends_part
+                    final_text = draft_part
+                else:
+                    # 容错：如果模型没按格式输出，直接全部显示
+                    final_text = res
+            except:
+                final_text = res
+
+        st.session_state['generated_sections'][module] = final_text
         
         if f"text_{module}" in st.session_state:
-            st.session_state[f"text_{module}"] = res.strip()
+            st.session_state[f"text_{module}"] = final_text
         
         if module in st.session_state['translated_sections']:
             del st.session_state['translated_sections'][module]
@@ -352,6 +385,11 @@ if st.session_state.get('generated_sections'):
         if module in st.session_state['generated_sections']:
             with st.container():
                 st.subheader(f"{modules[module]}")
+                
+                # --- 修改点：如果是 Motivation，先显示调研结果 ---
+                if module == "Motivation" and st.session_state.get('motivation_trends'):
+                    with st.expander("📚 点击查看：行业趋势调研与参考源 (Reference)", expanded=True):
+                        st.info(st.session_state['motivation_trends'])
                 
                 c1, c2 = st.columns([1, 1])
                 
@@ -381,6 +419,7 @@ if st.session_state.get('generated_sections'):
                                     st.error("需要 API Key")
                                 else:
                                     with st.spinner("正在重写..."):
+                                        # 重写时不需要再调研，只需要重写正文
                                         revise_prompt = f"""
                                         【任务】根据反馈修改段落。
                                         【原段落】{current_content}
@@ -438,4 +477,3 @@ if st.session_state.get('generated_sections'):
         mime="text/plain",
         type="primary"
     )
-
