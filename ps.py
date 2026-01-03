@@ -16,18 +16,46 @@ def get_app_version():
     try:
         timestamp = os.path.getmtime(__file__)
         dt = datetime.fromtimestamp(timestamp)
-        # 格式：v13.13.月日.时分
+        # 格式：v13.15.月日.时分
         build_ver = dt.strftime('%m%d.%H%M')
-        return f"v13.13.{build_ver}", dt.strftime('%Y-%m-%d %H:%M:%S')
+        return f"v13.15.{build_ver}", dt.strftime('%Y-%m-%d %H:%M:%S')
     except Exception:
-        return "v13.13.Dev", "Unknown"
+        return "v13.15.Dev", "Unknown"
 
 current_version, last_updated_time = get_app_version()
 
 # ==========================================
-# 1. 页面基础配置
+# 1. 页面基础配置 & CSS 注入
 # ==========================================
 st.set_page_config(page_title=f"留学文书工具 {current_version}", layout="wide")
+
+# --- CSS Hack: 强制三列卡片等高 ---
+st.markdown("""
+<style>
+    /* 让 Column 容器变为 Flex 布局 */
+    div[data-testid="column"] {
+        display: flex;
+        flex-direction: column;
+    }
+    
+    /* 让带边框的容器 (Card) 自动撑满高度 */
+    div[data-testid="stVerticalBlockBorderWrapper"] {
+        flex-grow: 1;
+        display: flex;
+        flex-direction: column;
+    }
+    
+    /* 确保内部内容布局合理 */
+    div[data-testid="stVerticalBlockBorderWrapper"] > div {
+        flex-grow: 1;
+    }
+    
+    /* 微调 Label 样式，使其更紧凑 */
+    .stMarkdown p {
+        margin-bottom: 0px;
+    }
+</style>
+""", unsafe_allow_html=True)
 
 # 初始化 Session State
 if 'generated_sections' not in st.session_state:
@@ -61,13 +89,13 @@ with st.sidebar:
     st.markdown("### 关于")
     st.info(f"**当前版本:** {current_version}")
     st.caption(f"**最后更新:** {last_updated_time}")
-    st.caption("**Update:** UI 卡片化重构 + 幽默文案库扩容")
+    st.caption("**Update:** 标题去图标 + 课程设置 UI 统一")
 
 # ==========================================
 # 3. 核心函数与文案库
 # ==========================================
 
-# --- 扩容后的幽默加载文案库 ---
+# --- 幽默加载文案库 ---
 FUNNY_LOADING_MESSAGES = [
     "☕️ 正在煮咖啡，顺便思考一下人生...",
     "🧠 正在和 Google 总部的服务器进行脑电波对接...",
@@ -140,51 +168,51 @@ def get_gemini_response(prompt, media_content=None, text_context=None):
         return f"Error: {str(e)}"
 
 # ==========================================
-# 4. 界面：信息采集 (UI 卡片化重构)
+# 4. 界面：信息采集 (UI 优化版)
 # ==========================================
 st.header("1. 信息采集与素材上传")
 
-# 使用 columns 布局
 col_student, col_counselor, col_target = st.columns(3)
 
-# --- 第一栏：学生提供信息 (Card 1) ---
+# --- 第一栏：学生提供信息 (去除图标) ---
 with col_student:
-    with st.container(border=True): # 增加边框，形成卡片视觉
-        st.markdown("### 🧑‍🎓 学生提供信息")
+    with st.container(border=True):
+        st.markdown("### 学生提供信息") # 已去除 🧑‍🎓
         st.caption("上传简历、素材表与成绩单")
         
         uploaded_material = st.file_uploader("📄 文书素材/简历 (Word/PDF)", type=['docx', 'pdf'])
         uploaded_transcript = st.file_uploader("🎓 成绩单 (截图/PDF)", type=['png', 'jpg', 'jpeg', 'pdf'])
 
-# --- 第二栏：顾问指导意见 (Card 2) ---
+# --- 第二栏：顾问指导意见 (去除图标) ---
 with col_counselor:
-    with st.container(border=True): # 增加边框
-        st.markdown("### 👨‍🏫 顾问指导意见")
+    with st.container(border=True):
+        st.markdown("### 顾问指导意见") # 已去除 👨‍🏫
         st.caption("设定文书的整体策略与调性")
         
-        # 调整 height 以匹配左右两侧的高度
         counselor_strategy = st.text_area(
             "💡 写作策略/人设强调", 
-            height=280,  # 增加高度，使其视觉上与文件上传区域对齐
+            height=300, 
             placeholder="例如：\n1. 强调量化背景\n2. 解释GPA劣势\n3. 突出某段实习的领导力..."
         )
 
-# --- 第三栏：目标专业信息 (Card 3) ---
+# --- 第三栏：目标专业信息 (去除图标 + 课程UI统一) ---
 with col_target:
-    with st.container(border=True): # 增加边框
-        st.markdown("### 🏫 目标专业信息")
+    with st.container(border=True):
+        st.markdown("### 目标专业信息") # 已去除 🏫
         st.caption("输入目标学校与课程设置")
         
         target_school_name = st.text_input("🏛️ 目标学校 & 专业", placeholder="例如：UCL - MSc Business Analytics")
         
-        st.markdown("**课程设置 (Curriculum):**")
+        # --- UI 调整：字体与上方 Input Label 保持一致，并添加图标 ---
+        st.markdown("**📖 课程设置 (Curriculum)**") 
+        
         tab_text, tab_img = st.tabs(["文本粘贴", "图片上传"])
         
         with tab_text:
-            target_curriculum_text = st.text_area("粘贴课程列表", height=120, placeholder="Core Modules: ...")
+            target_curriculum_text = st.text_area("粘贴课程列表", height=160, placeholder="Core Modules: ...", label_visibility="collapsed")
         
         with tab_img:
-            uploaded_curriculum_images = st.file_uploader("上传课程截图", type=['png', 'jpg', 'jpeg'], accept_multiple_files=True)
+            uploaded_curriculum_images = st.file_uploader("上传课程截图", type=['png', 'jpg', 'jpeg'], accept_multiple_files=True, label_visibility="collapsed")
 
 # 读取素材文本
 student_background_text = ""
