@@ -16,11 +16,11 @@ def get_app_version():
     try:
         timestamp = os.path.getmtime(__file__)
         dt = datetime.fromtimestamp(timestamp)
-        # 格式：v13.19.月日.时分
+        # 格式：v13.20.月日.时分
         build_ver = dt.strftime('%m%d.%H%M')
-        return f"v13.19.{build_ver}", dt.strftime('%Y-%m-%d %H:%M:%S')
+        return f"v13.20.{build_ver}", dt.strftime('%Y-%m-%d %H:%M:%S')
     except Exception:
-        return "v13.19.Dev", "Unknown"
+        return "v13.20.Dev", "Unknown"
 
 current_version, last_updated_time = get_app_version()
 
@@ -131,7 +131,7 @@ def stream_vibe_text():
     quote = random.choice(DAILY_VIBES)
     for word in quote.split(): 
         yield word + " "
-        time.sleep(0.05) # 控制打字速度
+        time.sleep(0.05) 
 
 # ==========================================
 # 3. 系统设置 (侧边栏 - 含情绪价值模块)
@@ -159,7 +159,7 @@ with st.sidebar:
     st.markdown("### 关于")
     st.info(f"**当前版本:** {current_version}")
     st.caption(f"**最后更新:** {last_updated_time}")
-    st.caption("**Update:** 新增英式/美式拼写切换功能")
+    st.caption("**Update:** 灵感助手不跳页修复 + 翻译禁词升级")
 
 # ==========================================
 # 4. 核心函数
@@ -267,7 +267,7 @@ if uploaded_material:
 # 6. 界面：写作设定 (新增拼写选项)
 # ==========================================
 st.markdown("---")
-st.header("2. 写作设定") # 已重命名
+st.header("2. 写作设定")
 
 modules = {
     "Motivation": "申请动机",
@@ -277,14 +277,12 @@ modules = {
     "Career_Goal": "职业规划"
 }
 
-# 使用列布局来放置 模块选择 和 拼写选择
 col_modules, col_style = st.columns([3, 1])
 
 with col_modules:
     selected_modules = st.multiselect("选择模块：", list(modules.keys()), format_func=lambda x: modules[x], default=list(modules.keys()))
 
 with col_style:
-    # 新增：拼写风格选择
     spelling_preference = st.radio(
         "🔤 拼写偏好 (Spelling)",
         ["🇬🇧 英式 (British)", "🇺🇸 美式 (American)"],
@@ -306,7 +304,7 @@ CLEAN_OUTPUT_RULES = """
 5. 必须写成一个完整的、连贯的中文自然段。
 """
 
-# 注意：这里只定义基础规则，拼写规则会在点击翻译按钮时动态注入
+# --- 核心翻译规则 (含新增禁词与副词禁令) ---
 TRANSLATION_RULES_BASE = """
 【Translation Task】
 Translate the provided Chinese text into a professional, human-sounding Personal Statement paragraph.
@@ -318,19 +316,18 @@ Translate the provided Chinese text into a professional, human-sounding Personal
 
 2. **SEMICOLONS (;) FOR FLOW**:
    - **MANDATORY**: When a sentence is grammatically complete but the thought is not finished (and leads directly into the next point), use a **semicolon (;)** to connect them.
-   - *Example*: "The model failed initially; this failure forced me to re-evaluate the parameters."
 
-3. **ADVERB CONTROL (Nuanced)**:
-   - **STRICTLY PROHIBITED**: Adverbs placed immediately before verbs or adjectives to intensify them (e.g., "deeply analyze", "perfectly align").
-   - **ALLOWED**: "Robust" and "scalable" are permitted.
+3. **ADVERB CONTROL (ZERO TOLERANCE)**:
+   - **STRICTLY PROHIBITED**: The combination of **Adverb + Verb** (e.g., "deeply analyze", "successfully completed") OR **Adverb + Adjective** (e.g., "perfectly align", "keenly interested").
+   - **ACTION**: Delete the adverb entirely. Just use the verb or adjective.
 
 4. **VOCABULARY PURGE**: 
-   - Avoid "delve into", "pivotal", "tapestry". Use precise, simple words.
+   - Use precise, simple words.
 
 【🚫 BANNED WORDS LIST (Strictly Prohibited)】
 [Verbs]: delve into, uncover, reveal, recognize, master, refine, cultivate, address, bridge, spearhead, pioneer, align with, stems from, underscore, highlight
-[Adjectives/Adverbs]: instrumental, pivotal, seamless, systematically, rigorously, profoundly, deeply, acutely, keenly, comprehensively, perfectly, meticulously
-[Nouns]: paradigm, trajectory, aspirations, vision, landscape, tapestry, realm, foundation
+[Adjectives/Adverbs]: instrumental, pivotal, seamless, systematically, rigorously, profoundly, deeply, acutely, keenly, comprehensively, perfectly, meticulously, proficiency
+[Nouns]: paradigm, trajectory, aspirations, vision, landscape, tapestry, realm, foundation, tenure
 [Connectors]: thereby, thus (when used with -ing), in turn
 [Phrases]: "not only... but also", "Building on this", "rich tapestry", "testament to", "a wide array of"
 
@@ -597,7 +594,7 @@ if st.session_state.get('generated_sections'):
                                 st.error("需要 API Key")
                             else:
                                 with st.spinner("Translating..."):
-                                    # --- 动态注入拼写规则 ---
+                                    # 动态注入拼写规则
                                     spelling_instruction = ""
                                     if "British" in spelling_preference:
                                         spelling_instruction = "\n【SPELLING RULE】: STRICTLY use British English spelling (e.g., colour, analyse, programme, centre, organisation)."
@@ -605,10 +602,7 @@ if st.session_state.get('generated_sections'):
                                         spelling_instruction = "\n【SPELLING RULE】: STRICTLY use American English spelling (e.g., color, analyze, program, center, organization)."
                                     
                                     content_to_translate = st.session_state[f"text_{module}"]
-                                    
-                                    # 组合完整 Prompt
                                     full_trans_prompt = f"{TRANSLATION_RULES_BASE}\n{spelling_instruction}\n【Input Text】:\n{content_to_translate}"
-                                    
                                     trans_res = get_gemini_response(full_trans_prompt)
                                     st.session_state['translated_sections'][module] = trans_res.strip()
                         
@@ -618,33 +612,33 @@ if st.session_state.get('generated_sections'):
                         else:
                             st.info("👈 满意左侧中文稿后，点击上方按钮生成翻译。")
 
-                    # Tab 2: 灵感助手 (Chat)
+                    # Tab 2: 灵感助手 (Chat) - 重构版 (No Jump)
                     with tab_chat:
                         st.caption("🤔 遇到卡顿？在这里查资料、问同义词或寻找灵感。")
                         
                         if module not in st.session_state['chat_histories']:
                             st.session_state['chat_histories'][module] = []
                         
-                        chat_container = st.container(height=250)
-                        with chat_container:
-                            for msg in st.session_state['chat_histories'][module]:
-                                with st.chat_message(msg["role"]):
-                                    st.markdown(msg["content"])
+                        # 1. 历史记录容器 (放在表单上方)
+                        chat_history_container = st.container(height=250)
                         
-                        user_query = st.text_input(f"向助手提问 ({modules[module]})", key=f"chat_in_{module}")
+                        # 2. 输入表单 (clear_on_submit=True 自动清空)
+                        with st.form(key=f"chat_form_{module}", clear_on_submit=True):
+                            user_query = st.text_input(f"向助手提问 ({modules[module]})", key=f"chat_in_{module}")
+                            submit_chat = st.form_submit_button("发送")
                         
-                        if st.button("发送", key=f"chat_send_{module}"):
-                            if not user_query:
-                                st.warning("请输入问题")
-                            elif not api_key:
+                        # 3. 逻辑处理 (在同一个 run 周期内完成，不调用 rerun)
+                        if submit_chat and user_query:
+                            if not api_key:
                                 st.error("需要 API Key")
                             else:
+                                # 记录用户提问
                                 st.session_state['chat_histories'][module].append({"role": "user", "content": user_query})
                                 
                                 # 获取随机文案
                                 loading_msg = get_random_loading_msg()
                                 
-                                # 强制 Spinner 包裹 API 调用
+                                # 调用 API
                                 with st.spinner(loading_msg):
                                     chat_prompt = f"""
                                     你是一个专业的留学文书助手。用户正在撰写 '{modules[module]}' 部分。
@@ -652,9 +646,13 @@ if st.session_state.get('generated_sections'):
                                     请提供简短、专业且有帮助的回答。
                                     """
                                     ai_reply = get_gemini_response(chat_prompt)
-                                    
                                     st.session_state['chat_histories'][module].append({"role": "assistant", "content": ai_reply})
-                                    st.rerun()
+
+                        # 4. 渲染历史记录 (使用更新后的 state)
+                        with chat_history_container:
+                            for msg in st.session_state['chat_histories'][module]:
+                                with st.chat_message(msg["role"]):
+                                    st.markdown(msg["content"])
 
     # ==========================================
     # 9. 导出
