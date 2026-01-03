@@ -198,6 +198,7 @@ Translate the provided Chinese text into a professional English Personal Stateme
 - draw
 - demonstrate
 - privilege
+- tenure
 - Any metaphorical words in quotation marks (e.g., "sponge", "bridge")
 
 【Input Text】:
@@ -437,3 +438,4 @@ if st.session_state.get('generated_sections'):
         mime="text/plain",
         type="primary"
     )
+
