@@ -16,41 +16,47 @@ def get_app_version():
     try:
         timestamp = os.path.getmtime(__file__)
         dt = datetime.fromtimestamp(timestamp)
-        # 格式：v13.15.月日.时分
+        # 格式：v13.16.月日.时分
         build_ver = dt.strftime('%m%d.%H%M')
-        return f"v13.15.{build_ver}", dt.strftime('%Y-%m-%d %H:%M:%S')
+        return f"v13.16.{build_ver}", dt.strftime('%Y-%m-%d %H:%M:%S')
     except Exception:
-        return "v13.15.Dev", "Unknown"
+        return "v13.16.Dev", "Unknown"
 
 current_version, last_updated_time = get_app_version()
 
 # ==========================================
-# 1. 页面基础配置 & CSS 注入
+# 1. 页面基础配置 & 强力 CSS 对齐
 # ==========================================
 st.set_page_config(page_title=f"留学文书工具 {current_version}", layout="wide")
 
-# --- CSS Hack: 强制三列卡片等高 ---
+# --- CSS Hack: 强制三列卡片等高 (核心修改) ---
 st.markdown("""
 <style>
-    /* 让 Column 容器变为 Flex 布局 */
+    /* 1. 找到包含这三列的水平容器，强制子元素拉伸以适应高度 */
+    div[data-testid="stHorizontalBlock"] {
+        align-items: stretch;
+    }
+
+    /* 2. 让每一列 (Column) 变成 Flex 容器，方向垂直 */
     div[data-testid="column"] {
         display: flex;
         flex-direction: column;
     }
-    
-    /* 让带边框的容器 (Card) 自动撑满高度 */
+
+    /* 3. 核心：让带边框的卡片 (Border Wrapper) 自动填充剩余空间，且高度设为 100% */
     div[data-testid="stVerticalBlockBorderWrapper"] {
-        flex-grow: 1;
+        flex: 1;
+        height: 100%;
         display: flex;
         flex-direction: column;
     }
     
-    /* 确保内部内容布局合理 */
+    /* 4. 微调内部间距，防止内容贴边 */
     div[data-testid="stVerticalBlockBorderWrapper"] > div {
         flex-grow: 1;
     }
-    
-    /* 微调 Label 样式，使其更紧凑 */
+
+    /* 5. 调整 Label 边距，使 UI 更紧凑 */
     .stMarkdown p {
         margin-bottom: 0px;
     }
@@ -89,7 +95,7 @@ with st.sidebar:
     st.markdown("### 关于")
     st.info(f"**当前版本:** {current_version}")
     st.caption(f"**最后更新:** {last_updated_time}")
-    st.caption("**Update:** 标题去图标 + 课程设置 UI 统一")
+    st.caption("**Update:** CSS 强制卡片高度严格一致")
 
 # ==========================================
 # 3. 核心函数与文案库
@@ -168,37 +174,39 @@ def get_gemini_response(prompt, media_content=None, text_context=None):
         return f"Error: {str(e)}"
 
 # ==========================================
-# 4. 界面：信息采集 (UI 优化版)
+# 4. 界面：信息采集 (UI 优化版 - 强制等高)
 # ==========================================
 st.header("1. 信息采集与素材上传")
 
+# 使用 columns 布局
 col_student, col_counselor, col_target = st.columns(3)
 
-# --- 第一栏：学生提供信息 (去除图标) ---
+# --- 第一栏：学生提供信息 ---
 with col_student:
     with st.container(border=True):
-        st.markdown("### 学生提供信息") # 已去除 🧑‍🎓
+        st.markdown("### 学生提供信息")
         st.caption("上传简历、素材表与成绩单")
         
         uploaded_material = st.file_uploader("📄 文书素材/简历 (Word/PDF)", type=['docx', 'pdf'])
         uploaded_transcript = st.file_uploader("🎓 成绩单 (截图/PDF)", type=['png', 'jpg', 'jpeg', 'pdf'])
 
-# --- 第二栏：顾问指导意见 (去除图标) ---
+# --- 第二栏：顾问指导意见 ---
 with col_counselor:
     with st.container(border=True):
-        st.markdown("### 顾问指导意见") # 已去除 👨‍🏫
+        st.markdown("### 顾问指导意见")
         st.caption("设定文书的整体策略与调性")
         
+        # 调整高度以适配视觉
         counselor_strategy = st.text_area(
             "💡 写作策略/人设强调", 
-            height=300, 
+            height=280, 
             placeholder="例如：\n1. 强调量化背景\n2. 解释GPA劣势\n3. 突出某段实习的领导力..."
         )
 
-# --- 第三栏：目标专业信息 (去除图标 + 课程UI统一) ---
+# --- 第三栏：目标专业信息 ---
 with col_target:
     with st.container(border=True):
-        st.markdown("### 目标专业信息") # 已去除 🏫
+        st.markdown("### 目标专业信息")
         st.caption("输入目标学校与课程设置")
         
         target_school_name = st.text_input("🏛️ 目标学校 & 专业", placeholder="例如：UCL - MSc Business Analytics")
@@ -209,7 +217,8 @@ with col_target:
         tab_text, tab_img = st.tabs(["文本粘贴", "图片上传"])
         
         with tab_text:
-            target_curriculum_text = st.text_area("粘贴课程列表", height=160, placeholder="Core Modules: ...", label_visibility="collapsed")
+            # 调整高度，使其撑起卡片
+            target_curriculum_text = st.text_area("粘贴课程列表", height=140, placeholder="Core Modules: ...", label_visibility="collapsed")
         
         with tab_img:
             uploaded_curriculum_images = st.file_uploader("上传课程截图", type=['png', 'jpg', 'jpeg'], accept_multiple_files=True, label_visibility="collapsed")
