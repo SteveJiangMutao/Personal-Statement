@@ -15,11 +15,11 @@ def get_app_version():
     try:
         timestamp = os.path.getmtime(__file__)
         dt = datetime.fromtimestamp(timestamp)
-        # 格式：v13.7.月日.时分
+        # 格式：v13.9.月日.时分
         build_ver = dt.strftime('%m%d.%H%M')
-        return f"v13.7.{build_ver}", dt.strftime('%Y-%m-%d %H:%M:%S')
+        return f"v13.9.{build_ver}", dt.strftime('%Y-%m-%d %H:%M:%S')
     except Exception:
-        return "v13.7.Dev", "Unknown"
+        return "v13.9.Dev", "Unknown"
 
 current_version, last_updated_time = get_app_version()
 
@@ -59,7 +59,7 @@ with st.sidebar:
     st.markdown("### 关于")
     st.info(f"**当前版本:** {current_version}")
     st.caption(f"**最后更新:** {last_updated_time}")
-    st.caption("**Update:** 学术部分增加核心概念与真实细节")
+    st.caption("**Update:** 优化分号使用与副词限制")
 
 # ==========================================
 # 3. 核心函数
@@ -171,37 +171,38 @@ CLEAN_OUTPUT_RULES = """
 5. 必须写成一个完整的、连贯的中文自然段。
 """
 
-# 翻译规则
+# --- 修改点：翻译规则 v13.9 ---
 TRANSLATION_RULES = """
 【Translation Task】
-Translate the provided Chinese text into a professional English Personal Statement paragraph.
+Translate the provided Chinese text into a professional, human-sounding Personal Statement paragraph.
 
-【Strict Constraints & Style Guide】
-1. **Short, Simple Sentences**: STRICTLY avoid long, convoluted sentences. Break complex ideas into shorter, punchier sentences (Subject-Verb-Object structure).
-2. **Logical Linking**: To prevent the short sentences from sounding "choppy" or robotic, you MUST use precise logical connectors (e.g., "Therefore," "Consequently," "However," "Subsequently," "Thus," "In turn") to bridge them smoothly.
-3. **No Descriptive Adverbs**: Do not use adverbs that modify verbs/adjectives (e.g., "deeply," "successfully," "greatly"). *Transitional adverbs (like 'However') are allowed.*
-4. **NO Gerunds as Nouns**: Do not use -ing words as nouns (e.g., avoid "Learning is...").
-5. **Professional Terminology**: Ensure high academic/professional precision.
-6. **Paragraphing**: Keep the output as ONE single paragraph.
-7. **Bolding**: Output the ENTIRE translated text in **Bold** (Markdown).
-8. **Semicolons**: Use semicolons (;) occasionally to link closely related independent clauses.
-9. **Quotation Marks**: Punctuation must be OUTSIDE quotation marks.
+【🚨 CRITICAL ANTI-AI STYLE GUIDE】
+1. **KILL THE "AI SENTENCE PATTERN"**: 
+   - **ABSOLUTELY FORBIDDEN**: The pattern "I did X, **thereby/thus/enabling** me to do Y." 
+   - **SOLUTION**: Split into two sentences or use active verbs.
 
-【🚫 BANNED WORDS/PHRASES (Do NOT use)】
-- master (in the sense of learning/grasping)
-- my goal is to
-- permit
-- deep comprehension
-- focus
-- look forward to
-- address
-- command
-- drawn to
-- draw
-- demonstrate
-- privilege
-- "not only... but also" (avoid this structure as it creates long sentences)
-- Any metaphorical words in quotation marks
+2. **SEMICOLONS (;) FOR FLOW**:
+   - **MANDATORY**: When a sentence is grammatically complete but the thought is not finished (and leads directly into the next point), use a **semicolon (;)** to connect them.
+   - *Example*: "The model failed initially; this failure forced me to re-evaluate the parameters." (Instead of "The model failed initially. This failure..." or "The model failed, thereby forcing...")
+
+3. **ADVERB CONTROL (Nuanced)**:
+   - **STRICTLY PROHIBITED**: Adverbs placed immediately before verbs or adjectives to intensify them (e.g., "deeply analyze", "perfectly align", "acutely aware", "carefully examined"). Use stronger verbs instead (e.g., "scrutinized" instead of "carefully examined").
+   - **ALLOWED**: "Robust" and "scalable" are permitted.
+
+4. **VOCABULARY PURGE**: 
+   - Avoid "delve into", "pivotal", "tapestry". Use precise, simple words.
+
+【🚫 BANNED WORDS LIST (Strictly Prohibited)】
+[Verbs]: delve into, uncover, reveal, recognize, master, refine, cultivate, address, bridge, spearhead, pioneer, align with, stems from, underscore, highlight
+[Adjectives/Adverbs]: instrumental, pivotal, seamless, systematically, rigorously, profoundly, deeply, acutely, keenly, comprehensively, perfectly, meticulously
+[Nouns]: paradigm, trajectory, aspirations, vision, landscape, tapestry, realm, foundation
+[Connectors]: thereby, thus (when used with -ing), in turn
+[Phrases]: "not only... but also", "Building on this", "rich tapestry", "testament to", "a wide array of"
+
+【Formatting】
+1. Output as ONE single paragraph.
+2. Output the ENTIRE text in **Bold**.
+3. No Markdown headers.
 
 【Input Text】:
 """
@@ -277,7 +278,6 @@ if st.button("开始生成初稿", type="primary"):
     {CLEAN_OUTPUT_RULES}
     """
 
-    # --- 修改点：学术背景 Prompt 升级 ---
     prompt_academic = f"""
     【任务】撰写 "本科学习经历" (Academic Background) 部分。
     【输入背景】
